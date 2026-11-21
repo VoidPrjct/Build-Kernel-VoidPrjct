@@ -26,6 +26,11 @@ WANT_Y=(
   CONFIG_LTO_CLANG
   CONFIG_LTO_CLANG_THIN
   CONFIG_MODVERSIONS
+  # Fork ini memberi CONFIG_WERROR default y (init/Kconfig), jadi -Werror
+  # berlaku global, termasuk untuk kode yang ditambahkan patch 50. Dijadikan
+  # eksplisit supaya mematikannya (kalau suatu saat terpaksa) adalah keputusan
+  # yang tercatat dan gagal di sini, bukan perubahan diam-diam.
+  CONFIG_WERROR
   # Baseline GKI memakai CFI. ThinLTO tidak mematikannya (di 5.10 fork ini
   # CFI_CLANG hanya butuh LTO_CLANG + KALLSYMS; keduanya tetap terpenuhi), tapi
   # kalau suatu saat olddefconfig membuangnya, kernelnya jadi menyimpang dari

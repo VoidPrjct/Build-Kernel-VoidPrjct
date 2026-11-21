@@ -490,3 +490,59 @@ sesudahnya tidak mengerjakan ulang objek apa pun.
    kompatibilitas simbol. Kalau nilainya 0, jalur AVC itu tidak pernah cocok.
 4. Perbandingan `zygote_next` diberi syarat `!= 0`, supaya "belum diketahui"
    tidak pernah berarti "cocok".
+
+---
+
+## Run 44931777498 — mode=check — GAGAL, tetapi hampir seluruhnya lolos
+
+Urutan build yang baru bekerja: `security/selinux/` dibangun lebih dulu, dan
+`flask.h` punya penyedia saat dibutuhkan. **Seluruh berkas KernelSU-Next
+terkompilasi**, termasuk `selinux/inode.c` dan `selinux/selinux.c` yang juga
+memakai `objsec.h`:
+
+```
+CC      drivers/kernelsu/selinux/selinux.o
+CC      drivers/kernelsu/supercall/dispatch.o
+CC      drivers/kernelsu/feature/selinux_hide.o
+...
+CC      drivers/kernelsu/susfs_compat.o
+```
+
+Yang gagal hanya berkas kita sendiri, dan penyebabnya sepele:
+
+```
+susfs_compat.c:10:59: error: '/*' within block comment [-Werror,-Wcomment]
+   10 | ... supercall/*, sulog/*). Patch
+```
+
+Saya menulis direktori bergaya `supercall/*` di dalam komentar blok. Diperiksa
+ulang dengan penyaring komentar: sekarang tidak ada lagi urutan `/*` di dalam
+komentar blok mana pun.
+
+### Yang justru lebih penting dari error itu: `-Werror` berlaku global
+
+`init/Kconfig` fork ini memberi:
+
+```
+config WERROR
+	bool "Compile the kernel with warnings as errors"
+	default y
+```
+
+dan `Makefile` baris 797: `KBUILD_CFLAGS-$(CONFIG_WERROR) += -Werror`.
+
+Jadi seluruh kode yang ditambahkan patch 50 (`fs/exec.c`, `fs/open.c`,
+`fs/stat.c`, `fs/read_write.c`, `fs/susfs.c`, `kernel/sys.c`, `kernel/reboot.c`,
+`security/selinux/*`, `drivers/input/input.c`) juga harus bebas peringatan
+dengan Clang 24. Ini risiko nyata untuk build penuh: SUSFS v2.4.0 ditulis untuk
+GKI 5.10 yang biasanya dibangun dengan Clang yang jauh lebih tua, sedangkan
+peringatan baru bisa muncul di compiler yang lebih baru.
+
+Keputusan: `-Werror` **dibiarkan aktif** (itu baseline GKI). `CONFIG_WERROR`
+sekarang masuk daftar wajib di `verify-config.sh`, supaya kalau suatu saat
+terpaksa dimatikan, itu jadi keputusan yang tercatat dan menggagalkan verifikasi
+-- bukan perubahan diam-diam.
+
+Catatan tambahan: `-Werror=implicit-function-declaration` aktif terlepas dari
+`CONFIG_WERROR` (Makefile baris 524), jadi setiap prototipe yang hilang tetap
+fatal. Audit simbol sebelumnya menutup risiko itu.

@@ -7,7 +7,7 @@
  * -------------------
  * kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch dari susfs4ksu v2.4.0
  * tidak bisa dipasang pada KernelSU-Next: 14 dari 32 file gagal (sucompat.c,
- * kernel_umount.c, selinux_hide.c, core/init.c, supercall/*, sulog/*). Patch
+ * kernel_umount.c, selinux_hide.c, core/init.c, supercall, sulog). Patch
  * itu ditulis untuk KernelSU resmi. Sementara patch 50 (sisi kernel) pas
  * 27/27 file, dan patch 50 mengharapkan sejumlah simbol milik pihak KernelSU.
  *
