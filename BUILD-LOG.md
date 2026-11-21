@@ -635,3 +635,36 @@ Sebelumnya ccache dipakai tetapi tidak disimpan antar-run, jadi setiap percobaan
 membayar ~1 jam lagi dari nol. Sekarang `.ccache` di-cache dengan kunci yang
 memuat SHA yang dipin + `restore-keys`, dan `continue-on-error` supaya kegagalan
 cache tidak menggagalkan build.
+
+---
+
+## Run 44933068033 — mode=check + push_integration — HIJAU
+
+Langkah 16 (push branch integrasi) berhasil dijalankan untuk pertama kali.
+Branch `scarlet/android12-5.10` di fork sekarang di commit
+`ba5f9ef06bca28eec2823447b1400613435db563`, dengan 35 berkas berubah
+(`fs/exec.c`, `fs/stat.c`, `drivers/Kconfig`, `fs/Kconfig`, dst).
+
+Diverifikasi dari API, bukan dari status hijau saja:
+
+- `KernelSU-Next`, `NoMount`, `out` **tidak** ikut ter-commit (404), sesuai
+  `.git/info/exclude` yang ditulis langkah push.
+- `fs/susfs.c` dan `include/linux/susfs.h` ada di branch.
+- `drivers/kernelsu/susfs_compat.c` **404** — dan itu wajar: `drivers/kernelsu`
+  adalah *symlink* ke `KernelSU-Next/kernel`, sedangkan `KernelSU-Next/`
+  dikecualikan. Hal yang sama berlaku untuk `fs/nomount`.
+
+Konsekuensi yang perlu dicatat: branch integrasi **bukan** pohon yang bisa
+di-build sendiri. Ia merekam perubahan sisi kernel saja. Reproduksibilitas penuh
+datang dari workflow: SHA KernelSU-Next/SUSFS/NoMount dipin sebagai input, dan
+`integrate.sh` dijalankan ulang setiap build. Jadi branch ini adalah arsip
+perubahan kernel-side, bukan sumber build.
+
+## Pin kernel base dipaksakan (commit 6fe8673)
+
+Sebelumnya langkah checkout hanya `git clone --branch android12-5.10` tanpa
+membandingkan apa pun; pin di `VERSIONS.md` karenanya hanya dokumentasi. Sekarang
+tip branch dibandingkan dengan input `kernel_sha`
+(`b1f875995dfb999f995404924836d959fece46a5`) dan build berhenti kalau berbeda,
+dengan pesan yang meminta pin + `VERSIONS.md` diperbarui. Nilainya sudah diuji:
+tip branch memang sama dengan pin.
