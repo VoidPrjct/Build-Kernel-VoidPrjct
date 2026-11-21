@@ -437,3 +437,56 @@ berlaku.
 
 Catatan lain dari run ini: kbuild melaporkan KernelSU-Next **v3.4.2** (versi
 33555), cocok dengan SHA yang dipin.
+
+---
+
+## Run 44931389321 — mode=check — GAGAL di langkah 9, tetapi sampai ke kode
+
+Target direktori bekerja: kompilasi berjalan sampai berkas sungguhan.
+
+```
+../security/selinux/include/objsec.h:28:10: fatal error: 'flask.h' file not found
+make[3]: *** [../scripts/Makefile.build:274: drivers/kernelsu/infra/file_wrapper.o] Error 1
+```
+
+Penyebab, diperiksa di `security/selinux/Makefile` fork ini:
+
+```
+$(addprefix $(obj)/,$(selinux-y)): $(obj)/flask.h
+$(obj)/flask.h: scripts/selinux/genheaders/genheaders FORCE
+```
+
+`flask.h` dan `av_permissions.h` dihasilkan di **objtree**
+(`out/security/selinux/`), dan keduanya hanya menjadi prasyarat objek
+`security/selinux` sendiri. Sementara `objsec.h` (yang meng-`#include "flask.h"`)
+dipakai berkas KernelSU — bahkan sebelum kode kita, KernelSU-Next sendiri sudah
+meng-`#include "objsec.h"` di `kernel/selinux/`. Kbuild tidak punya cara tahu
+hubungan itu, karena `#include` tidak terlihat oleh make.
+
+Ini bukan cuma masalah mode check: pada `make Image` dengan `-j`, kbuild membangun
+`vmlinux-dirs` secara paralel tanpa urutan, jadi `drivers/kernelsu` **bisa**
+dikompilasi sebelum `security/selinux` menghasilkan header itu. KernelSU-Next
+hidup dengan risiko ini di hulu; di sini tidak dibiarkan bergantung pada nasib.
+
+Perbaikan: direktori `security/selinux/` dibangun lebih dulu, di kedua mode.
+Host tool `genheaders` sudah dibangun oleh `make prepare` (terbukti di log run
+ini, baris `HOSTCC scripts/selinux/genheaders/genheaders`), jadi langkah ini
+tidak butuh `make scripts` terpisah. Karena kbuild inkremental, build penuh
+sesudahnya tidak mengerjakan ulang objek apa pun.
+
+### Perubahan susfs_compat.c pada commit ini (belum pernah diuji kompilasi)
+
+1. `susfs_is_current_ksu_domain()` sekarang memanggil `is_ksu_domain()` milik
+   KernelSU-Next, bukan membandingkan SID hasil resolusi sendiri. Alasannya
+   ditemukan saat membaca `selinux/selinux.c`: `is_sid_match()` sudah menangani
+   keadaan "cache SID belum terisi" dengan jatuh ke perbandingan string lewat
+   `security_secid_to_secctx`. Jadi fungsinya benar sejak pemanggilan pertama —
+   masalah urutan `late_initcall` vs pemuatan policy hilang seluruhnya, bukan
+   sekadar dikompensasi timer.
+2. Domain zygote/init memakai `is_zygote()` / `is_init()` milik KernelSU-Next.
+3. Percobaan resolusi SID dipertahankan, tetapi perannya berubah menjadi hanya
+   mengisi variabel — karena patch 50 memakai `susfs_ksu_sid` **secara
+   fungsional** (L2640: `sad->tsid == susfs_ksu_sid`), bukan sekadar
+   kompatibilitas simbol. Kalau nilainya 0, jalur AVC itu tidak pernah cocok.
+4. Perbandingan `zygote_next` diberi syarat `!= 0`, supaya "belum diketahui"
+   tidak pernah berarti "cocok".

@@ -118,15 +118,16 @@ static unsigned long susfs_last_sid_try;
 
 /*
  * Resolusi SID butuh SELinux policy yang sudah dimuat, dan policy itu dimuat
- * dari userspace. late_initcall() karena itu hampir selalu gagal. Salah satu
- * pemanggil, susfs_is_current_ksu_domain(), dipanggil dari jalur panas
- * (statfs/readlink), jadi percobaan ulang dibatasi paling cepat sekali per
- * detik sampai berhasil. Ini pengganti hook "setelah policy dimuat" milik
- * patch 10, yang tidak bisa dipasang di KernelSU-Next.
+ * dari userspace. late_initcall() karena itu hampir selalu gagal.
  *
- * Kalau SID tetap tidak bisa diresolusi, nilainya 0 dan semua pemeriksaan
- * domain mengembalikan false. Itu perilaku aman: SUSFS akan menganggap semua
- * proses bukan domain ksu, bukan sebaliknya.
+ * Variabel di atas tetap perlu terisi: patch 50 memakai susfs_ksu_sid secara
+ * fungsional (AVC: `sad->tsid == susfs_ksu_sid`), dan bagian zygote_next hanya
+ * punya SID sebagai pembandingnya. Percobaan ulang dibatasi paling cepat sekali
+ * per detik sampai berhasil; fungsi ini dipanggil dari jalur yang juga dipakai
+ * pemeriksaan domain, jadi tidak perlu timer sendiri.
+ *
+ * Pemeriksaan domain sendiri TIDAK bergantung pada nilai 0/terisi di sini --
+ * lihat catatan di susfs_is_current_ksu_domain().
  */
 static void susfs_try_resolve_sids(void)
 {
@@ -169,28 +170,45 @@ void susfs_set_batch_sid(void)
 
 /* ---- pemeriksaan domain: dipakai fs/susfs.c dan patch 50 ---------------- */
 
+/*
+ * Pemeriksaan domain TIDAK memakai variabel SID di atas. KernelSU-Next punya
+ * is_sid_match() (selinux/selinux.c) yang sudah menangani persis masalah yang
+ * saya khawatirkan: kalau cache SID belum terisi (policy belum dimuat), ia jatuh
+ * ke perbandingan string lewat security_secid_to_secctx. Jadi is_ksu_domain()
+ * benar sejak pemanggilan pertama, tanpa perlu hook "setelah policy dimuat"
+ * maupun percobaan ulang. Memakai milik KernelSU-Next juga berarti definisi
+ * domainnya satu sumber, bukan dua.
+ *
+ * susfs_try_resolve_sids() tetap dipanggil dari sini hanya untuk menjaga
+ * susfs_ksu_sid terisi: patch 50 memakainya secara fungsional di jalur AVC
+ * (50.patch L2640: `sad->tsid == susfs_ksu_sid`). Kalau nilainya 0, jalur itu
+ * tidak pernah cocok. Dipanggil paling cepat sekali per detik sampai berhasil.
+ */
 bool susfs_is_current_ksu_domain(void)
 {
 	susfs_try_resolve_sids();
-	return unlikely(current_sid() == susfs_ksu_sid);
+	return is_ksu_domain();
 }
 
 bool susfs_is_current_zygote_domain(void)
 {
-	susfs_try_resolve_sids();
-	return unlikely(current_sid() == susfs_zygote_sid);
+	return is_zygote(current_cred());
 }
 
 bool susfs_is_current_zygote_next_domain(void)
 {
+	/*
+	 * KernelSU-Next tidak mengenal domain zygote_next, jadi di sini memang
+	 * memakai SID hasil resolusi sendiri. Kalau policy tidak punya domain itu,
+	 * susfs_zygote_next_sid = 0 dan tidak ada yang cocok -- yang benar.
+	 */
 	susfs_try_resolve_sids();
-	return unlikely(current_sid() == susfs_zygote_next_sid);
+	return unlikely(current_sid() == susfs_zygote_next_sid && susfs_zygote_next_sid != 0);
 }
 
 bool susfs_is_current_init_domain(void)
 {
-	susfs_try_resolve_sids();
-	return unlikely(current_sid() == susfs_init_sid);
+	return is_init(current_cred());
 }
 
 u32 susfs_get_current_sid(void)
@@ -409,11 +427,20 @@ int susfs_ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	if (current_uid().val != 0)
 		return 0;
 
-	/* Hanya proses yang lahir dari zygote / zygote_next yang relevan. */
-	if (susfs_is_sid_equal(current_cred(), susfs_zygote_sid))
+	/* Pastikan SID zygote_next sudah dicoba diresolusi sebelum dipakai. */
+	susfs_try_resolve_sids();
+
+	/*
+	 * Hanya proses yang lahir dari zygote / zygote_next yang relevan.
+	 * Untuk zygote, dipakai is_zygote() milik KernelSU-Next (tahan terhadap
+	 * cache SID yang belum terisi). Zygote_next tidak dikenal KernelSU-Next,
+	 * jadi di sana tetap membandingkan SID hasil resolusi sendiri -- dengan
+	 * syarat SID-nya memang ada, supaya nilai 0 tidak pernah dianggap cocok.
+	 */
+	if (is_zygote(current_cred()))
 		return handle_zygote_setresuid(ruid, false);
 
-	if (susfs_is_sid_equal(current_cred(), susfs_zygote_next_sid))
+	if (susfs_zygote_next_sid && susfs_is_sid_equal(current_cred(), susfs_zygote_next_sid))
 		return handle_zygote_setresuid(ruid, true);
 
 	return 0;

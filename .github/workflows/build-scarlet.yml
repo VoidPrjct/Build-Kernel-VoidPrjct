@@ -182,12 +182,19 @@ jobs:
           {
             echo "== make prepare =="
             mk prepare
-            # Target direktori, bukan 'drivers/kernelsu/kernelsu.o': kbuild tidak
-            # punya aturan untuk objek gabungan sebagai target tunggal (run
-            # 44931056217: "No rule to make target .../kernelsu.o"). Target
-            # direktori membangun seluruh berkas KernelSU-Next, termasuk
-            # susfs_compat.c, sekaligus membuktikan 'kernelsu-objs += susfs_compat.o'
-            # benar-benar terbaca.
+            # flask.h/av_permissions.h dihasilkan di out/security/selinux oleh
+            # aturan di security/selinux/Makefile, dan hanya jadi prasyarat objek
+            # SELinux sendiri. objsec.h memakainya, dan objsec.h dipakai berkas
+            # KernelSU (termasuk susfs_compat.c) -- tapi kbuild tidak tahu itu.
+            # Run 44931389321: 'fatal error: flask.h file not found'.
+            # Karena itu direktorinya dibangun lebih dulu, menentukan urutan.
+            echo "== security/selinux/ (flask.h + av_permissions.h) =="
+            mk security/selinux/
+            # Target direktori, bukan 'drivers/kernelsu/kernelsu.o': aturan
+            # generik kbuild \$(obj)/%.o: \$(src)/%.c butuh kernelsu.c yang tidak
+            # ada (run 44931056217: "No rule to make target .../kernelsu.o").
+            # Target direktori membangun seluruh kernelsu-objs, termasuk
+            # susfs_compat.c.
             echo "== drivers/kernelsu/ =="
             mk drivers/kernelsu/
             # fs/susfs.o objek tunggal (bukan gabungan), jadi ini target yang sah.
@@ -209,6 +216,12 @@ jobs:
           cd kernel
 
           set -o pipefail
+          # Menentukan urutan: flask.h/av_permissions.h dihasilkan di
+          # out/security/selinux, dan berkas KernelSU membutuhkannya lewat
+          # objsec.h. Dengan -j, kbuild tidak tahu hubungan itu, jadi
+          # drivers/kernelsu bisa dikompilasi lebih dulu dan gagal.
+          # Dibangun lebih dulu; make berikutnya tinggal melanjutkan.
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" security/selinux/
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" Image 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
       - name: Cek hasil build
