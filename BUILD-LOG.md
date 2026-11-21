@@ -97,3 +97,56 @@ itu aslinya disediakan patch 10. Karena patch 10 tidak bisa dipasang, semuanya d
 ### Status
 
 Belum ada run. Menunggu workflow di-push dan dijalankan.
+
+---
+
+## Run 44928994659 — mode=check — GAGAL di langkah 5
+
+Error pertama:
+
+```
+[integrate][FATAL] folder KernelSU tidak terbentuk
+```
+
+Penyebab: `kernel/setup.sh` KernelSU-Next menaruh hasil clone di `$GKI_ROOT/$REPO`
+dengan `REPO="$OWNER"` = `KernelSU-Next`, jadi foldernya `KernelSU-Next`, bukan `KernelSU`.
+
+Perbaikan: skrip tidak lagi mengasumsikan nama folder; dipakai variabel `KSU_DIR`.
+Semua rujukan `KernelSU/` dan pemeriksaan adanya folder ikut diubah.
+Commit `b887429`.
+
+Catatan: SHA KernelSU-Next terverifikasi benar (`32e25d58fc1a`), jadi `setup.sh`
+tidak fallback ke branch default.
+
+---
+
+## Run 44929497344 — mode=check — GAGAL di langkah 5
+
+Berhasil sampai:
+
+```
+[integrate] KernelSU-Next OK: 32e25d58fc1a187e1abe7278904c31571235fc83
+[integrate] symlink drivers/kernelsu -> ../KernelSU-Next/kernel
+[integrate] 5 file SUSFS terunduh (328 KB)
+[integrate] patch 50 OK
+[integrate] CONFIG_KSU_SUSFS_* ditambahkan ke KernelSU-Next/kernel/Kconfig
+[integrate] susfs_compat.c terpasang
+[integrate] NoMount Setup Done!
+```
+
+Lalu gagal pada pemeriksaan milik skrip sendiri:
+
+```
+[integrate][FATAL] source fs/nomount/Kconfig tidak masuk ke fs/Kconfig
+```
+
+Penyebab: pemeriksaan memakai pola `NOMOUNT` (huruf besar), sedangkan baris yang
+disisipkan NoMount adalah `source "fs/nomount/Kconfig"` (huruf kecil, tanpa kata
+NOMOUNT). Integrasinya sendiri berhasil; cek saya yang salah.
+
+Perbaikan: pola diganti `fs/nomount/Kconfig`, mengikuti pemeriksaan di
+`kernel/setup.sh` NoMount sendiri.
+
+Hasil penting dari run ini: **patch 50 terpasang bersih di tree fork 5.10.272**,
+dua hunk patch 10 (Kconfig/Makefile) juga terpasang. Ini membuktikan asumsi
+integrasi tahap 1 benar.

@@ -138,7 +138,8 @@ curl -fsSL "$NOMOUNT_URL" -o "$WORKDIR/nomount-setup.sh" \
 sh "$WORKDIR/nomount-setup.sh" "$NOMOUNT_SHA" || die "setup.sh NoMount gagal"
 
 [ -f fs/nomount/Kconfig ] || die "fs/nomount/Kconfig tidak ada setelah setup"
-grep -q 'NOMOUNT' fs/Kconfig || die "source fs/nomount/Kconfig tidak masuk ke fs/Kconfig"
+# setup.sh NoMount menyisipkan baris ini sebelum endmenu terakhir.
+grep -q 'fs/nomount/Kconfig' fs/Kconfig || die "source fs/nomount/Kconfig tidak masuk ke fs/Kconfig"
 grep -q 'nomount' fs/Makefile || die "obj NOMOUNT tidak masuk ke fs/Makefile"
 GOT_NM=$(git -C NoMount rev-parse HEAD)
 if [ "$GOT_NM" != "$NOMOUNT_SHA" ]; then
