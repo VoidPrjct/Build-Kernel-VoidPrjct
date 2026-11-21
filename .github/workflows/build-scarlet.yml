@@ -16,6 +16,10 @@ on:
         description: "Branch di fork kernel"
         type: string
         default: android12-5.10
+      kernel_sha:
+        description: "Commit base yang dipin (harus sama dengan tip branch; kalau berbeda, build berhenti)"
+        type: string
+        default: b1f875995dfb999f995404924836d959fece46a5
       ksu_sha:
         description: "SHA KernelSU-Next"
         type: string
@@ -76,6 +80,19 @@ jobs:
           git clone --depth 1 --branch "${{ inputs.kernel_branch }}" \
             "https://x-access-token:${{ secrets.KERNEL_PAT }}@github.com/VoidPrjct/android_kernel_common-5.10.git" kernel
           cd kernel
+          # PRD: setiap komponen dipin. Tanpa ini, pin di VERSIONS.md hanya
+          # dokumentasi: kalau branch bergerak, build memakai basis lain tanpa
+          # ada yang tahu. Clone memakai --depth 1, jadi kalau tip branch tidak
+          # sama dengan pin, commit yang dipin memang tidak ada di clone ini --
+          # berhenti dengan pesan jelas, jangan menebak.
+          WANT="${{ inputs.kernel_sha }}"
+          GOT=$(git rev-parse HEAD)
+          if [ "$GOT" != "$WANT" ]; then
+            echo "::error::tip branch ${{ inputs.kernel_branch }} adalah $GOT, bukan pin $WANT"
+            echo "Perbarui input kernel_sha + VERSIONS.md, lalu jalankan ulang."
+            exit 1
+          fi
+          echo "pin kernel terverifikasi: $GOT"
           echo "KERNEL_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           KVER=$(awk -F' = ' '/^VERSION =/{v=$2} /^PATCHLEVEL =/{p=$2} /^SUBLEVEL =/{s=$2} END{print v"."p"."s}' Makefile)
           echo "KVER=$KVER" >> "$GITHUB_ENV"

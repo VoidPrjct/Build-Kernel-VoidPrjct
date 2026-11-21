@@ -9,7 +9,8 @@ Semua komponen dipin ke tag atau SHA. Nilai di bawah dibaca langsung dari sumber
 |---|---|
 | Repo | `VoidPrjct/android_kernel_common-5.10` |
 | Branch base | `android12-5.10` |
-| Commit base | `b1f875995dfb` (2026-05-11) |
+| Commit base | `b1f875995dfb999f995404924836d959fece46a5` (author 2026-05-11, commit 2026-10-26) |
+| Pin dipaksakan | ya — workflow berhenti kalau tip branch ≠ SHA di atas |
 | Versi kernel | `5.10.272` |
 | Branch kerja | `scarlet/android12-5.10` |
 | Upstream fork dari | `ramabondanp/android_kernel_common-5.10` |
