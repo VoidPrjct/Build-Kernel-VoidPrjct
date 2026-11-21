@@ -19,6 +19,21 @@ IMAGE="$OUT_DIR/arch/arm64/boot/Image"
 [ -f "$IMAGE" ] || die "Image tidak ditemukan di $IMAGE"
 log "Image: $(ls -l "$IMAGE" | awk '{print $5}') byte"
 
+# arm64 Image punya magic "ARM\x64" di offset 0x38 (56) menurut header boot
+# resmi. Ini membedakan Image sungguhan dari berkas terpotong atau kosong --
+# sesuatu yang tidak bisa ditangkap 'ls -l'.
+MAGIC=$(dd if="$IMAGE" bs=1 skip=56 count=4 2>/dev/null | od -An -tx1 | tr -d ' \n')
+[ "$MAGIC" = "41524d64" ] || die "Image bukan arm64 Image: magic di 0x38 = '$MAGIC' (harus 41524d64)"
+log "magic arm64 Image di 0x38: OK"
+
+# Header arm64 (Documentation/arm64/booting.rst) menaruh image_size di offset
+# 0x10, little-endian. Kalau ia lebih besar dari berkas, Image terpotong.
+FILE_SIZE=$(stat -c %s "$IMAGE")
+IMG_SIZE=$(dd if="$IMAGE" bs=1 skip=16 count=8 2>/dev/null | od -An -tu8 | tr -d ' ')
+[ -n "$IMG_SIZE" ] && [ "$IMG_SIZE" -le "$FILE_SIZE" ] \
+  || die "image_size di header ($IMG_SIZE) melebihi ukuran berkas ($FILE_SIZE)"
+log "image_size header: $IMG_SIZE <= $FILE_SIZE"
+
 WORK=$(mktemp -d)
 git clone --quiet https://github.com/osm0sis/AnyKernel3.git "$WORK/ak3" || die "clone AnyKernel3 gagal"
 git -C "$WORK/ak3" checkout --quiet "$AK3_SHA" || die "SHA AnyKernel3 $AK3_SHA tidak ada"

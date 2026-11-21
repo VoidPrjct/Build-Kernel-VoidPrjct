@@ -668,3 +668,18 @@ tip branch dibandingkan dengan input `kernel_sha`
 (`b1f875995dfb999f995404924836d959fece46a5`) dan build berhenti kalau berbeda,
 dengan pesan yang meminta pin + `VERSIONS.md` diperbarui. Nilainya sudah diuji:
 tip branch memang sama dengan pin.
+
+## Pengaman Image diperkuat (packaging)
+
+Sebelumnya keberadaan Image hanya dibuktikan `ls -l`. Itu tidak membedakan Image
+sungguhan dari berkas terpotong. Sekarang `package-anykernel.sh` juga memeriksa:
+
+- magic arm64 `"ARM\x64"` di offset `0x38` (header boot resmi arm64);
+- `image_size` di offset `0x10` tidak melebihi ukuran berkas.
+
+Ketiga kasus diuji lokal: Image valid lolos, magic hilang ditolak
+(`magic di 0x38 = '00000000'`), Image terpotong ditolak
+(`image_size 8388608 melebihi ukuran berkas 1048576`).
+
+Pemeriksaan yang sama dipakai untuk memeriksa artifact build penuh, karena build
+yang sedang berjalan memakai commit sebelum perubahan ini.
