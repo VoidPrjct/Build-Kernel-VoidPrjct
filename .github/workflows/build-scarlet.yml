@@ -103,20 +103,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -x toolchain/neutron/bin/clang ]; then
-            echo "[tc] sudah ada dari cache"
-          else
+          if [ ! -x toolchain/neutron/.ok ]; then
             mkdir -p toolchain
             # PRD 6.5: ambil dari daftar asset release, jangan menebak nama.
             gh release view "$NEUTRON_TAG" -R Neutron-Toolchains/clang-build-catalogue --json assets \
               --jq '.assets[].name' | tee toolchain/assets.txt
             gh release download "$NEUTRON_TAG" -R Neutron-Toolchains/clang-build-catalogue \
               -p "$NEUTRON_ASSET" -D toolchain --clobber
-            mkdir -p toolchain/neutron
+            rm -rf toolchain/neutron && mkdir -p toolchain/neutron
             tar --zstd -xf "toolchain/$NEUTRON_ASSET" -C toolchain/neutron
           fi
-          export PATH="$PWD/toolchain/neutron/bin:$PATH"
+          # Layout tarball tidak dijamin; cari clang yang sebenarnya, jangan asumsi bin/.
+          CLANG_BIN=$(find toolchain/neutron -type f -name clang -perm -u+x | head -1)
+          [ -n "$CLANG_BIN" ] || { echo "clang tidak ditemukan di dalam tarball"; find toolchain/neutron -maxdepth 3 | head -30; exit 1; }
+          BIN_DIR="$(cd "$(dirname "$CLANG_BIN")" && pwd)"
+          echo "NEUTRON_BIN=$BIN_DIR" >> "$GITHUB_ENV"
+          touch toolchain/neutron/.ok
+          export PATH="$BIN_DIR:$PATH"
           clang --version | tee clang-version.txt
+          echo "bin dir: $BIN_DIR"
 
       - name: Bangun kernel
         if: inputs.mode == 'build'
@@ -124,7 +129,7 @@ jobs:
           KERNEL_DIR: ${{ github.workspace }}/kernel
         run: |
           set -euo pipefail
-          export PATH="$PWD/toolchain/neutron/bin:$PATH"
+          export PATH="${NEUTRON_BIN}:$PATH"
           export CCACHE_DIR="$PWD/.ccache"
           export CCACHE_MAXSIZE=5G
           ccache --version | head -1
