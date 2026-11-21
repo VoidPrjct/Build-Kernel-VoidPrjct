@@ -150,3 +150,129 @@ Perbaikan: pola diganti `fs/nomount/Kconfig`, mengikuti pemeriksaan di
 Hasil penting dari run ini: **patch 50 terpasang bersih di tree fork 5.10.272**,
 dua hunk patch 10 (Kconfig/Makefile) juga terpasang. Ini membuktikan asumsi
 integrasi tahap 1 benar.
+
+---
+
+## Run 44929844514 — mode=build — GAGAL di langkah 5
+
+Integrasi berjalan sampai selesai:
+
+```
+[integrate] patch 50 OK
+[integrate] CONFIG_KSU_SUSFS_* ditambahkan ke KernelSU-Next/kernel/Kconfig
+[integrate] susfs_compat.c terpasang
+[integrate] NoMount Setup Done!
+```
+
+Lalu gagal pada pemeriksaan milik skrip sendiri:
+
+```
+[integrate][FATAL] NoMount salah checkout: dapat 6849f00a342b80338fb4398765f75f014dbcd557, harusnya 6849f00a342b
+```
+
+Penyebab: cek membandingkan SHA pin pendek (12 karakter) dengan keluaran
+`git rev-parse HEAD` (40 karakter). NoMount-nya **benar** — cek saya yang salah.
+Perbaikan: helper `sha_match()` yang membandingkan prefix, dipakai untuk
+KernelSU-Next maupun NoMount.
+
+---
+
+## Audit kontrak patch 50 ↔ KernelSU-Next (sebelum run berikutnya)
+
+Dilakukan tanpa menunggu CI, karena satu simbol kurang = link error setelah
+satu jam build. Caranya: 71 baris `extern` di dalam patch 50 diekstrak, lalu
+setiap simbol dibandingkan dengan KernelSU-Next `dev@32e25d58`.
+
+### Hasil: 18 simbol `ksu_*` yang disentuh patch 50
+
+| Simbol | Di KernelSU-Next | Tindakan |
+|---|---|---|
+| `__ksu_is_allow_uid_for_current(uid_t)` | ada, sama | pakai apa adanya |
+| `ksu_handle_input_handle_event(unsigned*, unsigned*, int*)` | ada, sama | pakai apa adanya |
+| `ksu_is_init_rc_hook_enabled` | tidak ada | definisi sendiri, keadaan mati |
+| `ksu_is_input_hook_enabled` | tidak ada | definisi sendiri, keadaan mati |
+| `ksu_handle_execveat` | tidak ada | stub |
+| `ksu_handle_post_execveat_sucompat` | tidak ada | stub |
+| `ksu_handle_faccessat` | tidak ada | stub |
+| `ksu_handle_stat` | tidak ada | stub |
+| `ksu_handle_vfs_fstat` | tidak ada | stub |
+| `ksu_handle_sys_read` | ada tapi `static`, tanda tangan beda | stub (tidak bentrok) |
+| `ksu_setup_preinit_file` | tidak ada | stub, balik 0 |
+| `ksu_preinit_handle_post_execveat` | tidak ada | stub, balik 0 |
+| `ksu_selinux_hide_enabled` | ada tapi `static bool` | definisi sendiri (false) |
+| `ksu_selinux_hide_running` | ada tapi `static bool` | definisi sendiri (false) |
+| `ksu_handle_execveat_sucompat` | ada, **tanda tangan beda** | **rename** |
+| `ksu_handle_setresuid` | ada, **tanda tangan beda** | **rename** |
+| `ksu_su_compat_enabled` | ada, **tipe beda** | **rename** |
+| `ksu_handle_sys_reboot` | tidak ada | dispatcher sendiri (`susfs_compat.c`) |
+
+Selain itu, 11 simbol `susfs_*` yang di-extern patch 50 semuanya sudah
+disediakan `fs/susfs.c`, dan seluruh 38 fungsi `susfs_*` yang dipanggil patch 50
+punya penyedianya. Tidak ada yang menggantung.
+
+### Tiga rename yang wajib, karena salah panggil = crash, bukan link error
+
+1. `ksu_handle_execveat_sucompat`
+   - patch 50: `int (int *fd, struct filename **, void *, void *, int *)`
+   - KSU-Next: `long (const char __user **, int, struct pt_regs *)`
+   - Dipanggil dari `fs/exec.c`. Kalau nama dibiarkan, KernelSU-Next membaca
+     pointer argumen yang salah. → `susfs_ksu_handle_execveat_sucompat`.
+2. `ksu_handle_setresuid`
+   - patch 50: `int (uid_t ruid, uid_t euid, uid_t suid)`
+   - KSU-Next: `int (uid_t old_uid, uid_t new_uid)`
+   - Dipanggil dari `kernel/sys.c`. → `susfs_ksu_handle_setresuid`, dengan isi
+     yang memakai API KernelSU-Next yang setara.
+3. `ksu_su_compat_enabled`
+   - patch 50: `struct static_key_true` (lalu `static_branch_likely()`)
+   - KSU-Next: `bool __read_mostly = true`
+   - `static_branch_likely()` membaca `struct static_key` dari alamat sebuah
+     `bool`. → `susfs_ksu_su_compat_enabled`, didefinisikan dengan tipe benar.
+
+Rename dilakukan dengan `sed` pada **baris tambahan patch saja**. Diperiksa
+dulu: ketiga nama itu sama sekali tidak muncul di baris konteks patch 50
+(2, 2, dan 6 kemunculan, semuanya baris `+`). Setelah rename, `git apply --check`
+diulang pada tree probe: **masih pas**, jumlah baris patch tidak berubah.
+
+### Porting `susfs_ksu_handle_setresuid`
+
+Isi fungsinya disalin dari patch 10, dengan dua penyesuaian yang dicatat:
+
+- `disable_seccomp()` tidak bisa dipanggil: di KernelSU-Next ia
+  `static void disable_seccomp(void)` di `policy/app_profile.c`. Fungsi itu
+  hanya mematikan seccomp untuk aplikasi ber-root, dan KernelSU-Next melakukan
+  hal yang sama pada jalurnya sendiri.
+- Keputusan umount dan pemasangan fd manager (`ksu_install_fd`) tidak
+  diduplikasi, karena KernelSU-Next sudah menjalankannya di hook setuid-nya.
+  Yang khas SUSFS dan tetap dikerjakan: penandaan `TIF_PROC_NO_SU` /
+  `TIF_PROC_UMOUNTED` dan penjadwalan pekerjaan tunda (`susfs_extra_works`).
+
+Bagian yang justru **tidak** disederhanakan: keputusan uid mana yang perlu
+di-umount tetap memakai `ksu_uid_should_umount()` — dan fungsi itu memang ada
+di KernelSU-Next, jadi perilakunya sama dengan upstream, bukan perkiraan.
+
+### Static key: kenapa didefinisikan mati
+
+`ksu_is_init_rc_hook_enabled`, `ksu_is_input_hook_enabled`, dan
+`susfs_ksu_su_compat_enabled` diinisialisasi `.key.enabled = 0` (bukan
+`DEFINE_STATIC_KEY_TRUE()` lalu di-disable saat init). Alasannya: keadaan sudah
+benar sejak boot, tidak bergantung urutan init maupun jump-label patching.
+
+Dampaknya: tiga hook milik KernelSU resmi (`ksu_handle_sys_read`,
+`ksu_handle_vfs_fstat`, `ksu_handle_input_handle_event`) dan seluruh blok
+su-compat di `fs/exec.c` / `fs/open.c` / `fs/stat.c` tidak pernah dipanggil.
+Itu memang yang diinginkan: fitur-fitur tersebut sudah dikerjakan KernelSU-Next
+dengan mekanismenya sendiri, dan menjalankan dua mekanisme sekaligus bukan
+tujuan PRD.
+
+### Resolusi SID: bug yang ditemukan sebelum sempat muncul di CI
+
+Patch 10 memanggil `susfs_set_batch_sid()` dari `selinux.c`, yaitu **setelah**
+SELinux policy dimuat. `late_initcall` berjalan sebelum itu, dan
+`security_secctx_to_secid()` tanpa policy akan gagal — akibatnya semua SID
+tetap 0 selamanya dan `susfs_is_current_ksu_domain()` selalu false.
+
+Penggantinya: resolusi SID dicoba ulang dari dalam fungsi pemeriksaan domain
+sendiri, dibatasi paling cepat sekali per detik (fungsi itu dipanggil dari
+jalur panas), dan dipaksa sekali lagi saat perintah userspace pertama datang
+lewat `ksu_handle_sys_reboot()`. Kalau tetap gagal, SID 0 membuat semua
+pemeriksaan domain mengembalikan false — perilaku aman.

@@ -25,6 +25,15 @@ log()  { echo "[integrate] $*"; }
 warn() { echo "[integrate][WARN] $*" >&2; }
 die()  { echo "[integrate][FATAL] $*" >&2; exit 1; }
 
+# Bandingkan dua SHA dengan aman kalau yang satu cuma prefix (mis. pin 12 karakter).
+# Dipakai untuk memverifikasi hasil checkout, karena `git rev-parse` selalu
+# mengembalikan 40 karakter.
+sha_match() {
+    local want="$1" got="$2"
+    [ "${#want}" -le "${#got}" ] || return 1
+    [ "${got:0:${#want}}" = "$want" ]
+}
+
 mkdir -p "$WORKDIR"
 
 cd "$KERNEL_DIR"
@@ -53,7 +62,7 @@ KSU_DIR="$KERNEL_DIR/KernelSU-Next"
 
 [ -d "$KSU_DIR" ] || die "folder KernelSU-Next tidak terbentuk di $KSU_DIR"
 GOT_KSU=$(git -C "$KSU_DIR" rev-parse HEAD)
-if [ "$GOT_KSU" != "$KSU_SHA" ]; then
+if ! sha_match "$KSU_SHA" "$GOT_KSU"; then
     die "KernelSU-Next salah checkout: dapat $GOT_KSU, harusnya $KSU_SHA (setup.sh kemungkinan fallback ke branch default)"
 fi
 log "KernelSU-Next OK: $GOT_KSU"
@@ -96,6 +105,36 @@ cp -f "$SUSFS_P/include/linux/susfs.h" "$SUSFS_P/include/linux/susfs_def.h" incl
 log "salin fs/susfs.c + include/linux/susfs{,_def}.h"
 
 log "terapkan patch 50 (sisi kernel)"
+
+# --- Rename tiga simbol yang di KernelSU-Next punya nama sama tetapi tipe
+# atau tanda tangan berbeda. Kalau dibiarkan, patch 50 akan memanggil fungsi
+# milik KernelSU-Next dengan argumen yang salah (bukan sekadar gagal link):
+#
+#   ksu_handle_execveat_sucompat : patch 50 int(int*,struct filename**,...)
+#                                  KSU-Next long(const char __user**,int,pt_regs*)
+#   ksu_handle_setresuid         : patch 50 int(uid_t,uid_t,uid_t)
+#                                  KSU-Next int(uid_t,uid_t)
+#   ksu_su_compat_enabled        : patch 50 struct static_key_true
+#                                  KSU-Next bool __read_mostly
+#
+# Rinciannya di scripts/susfs_compat.c. Penggantinya disediakan di sana.
+# Hanya baris tambahan ('+') yang disentuh; sudah diperiksa bahwa ketiga nama
+# ini tidak pernah muncul di baris konteks patch 50.
+sed -i -e 's/\bksu_handle_execveat_sucompat\b/susfs_ksu_handle_execveat_sucompat/g' \
+       -e 's/\bksu_handle_setresuid\b/susfs_ksu_handle_setresuid/g' \
+       -e 's/\bksu_su_compat_enabled\b/susfs_ksu_su_compat_enabled/g' \
+       "$SUSFS_P/50.patch"
+for n in susfs_ksu_handle_execveat_sucompat susfs_ksu_handle_setresuid susfs_ksu_su_compat_enabled; do
+    grep -q "$n" "$SUSFS_P/50.patch" || die "rename '$n' tidak kena di patch 50"
+done
+grep -qE '\bksu_su_compat_enabled\b' "$SUSFS_P/50.patch" \
+    && die "masih ada ksu_su_compat_enabled (bentrok tipe static_key_true vs bool)"
+grep -qE '\bksu_handle_setresuid\b' "$SUSFS_P/50.patch" \
+    && die "masih ada ksu_handle_setresuid (bentrok tanda tangan)"
+grep -qE '\bksu_handle_execveat_sucompat\b' "$SUSFS_P/50.patch" \
+    && die "masih ada ksu_handle_execveat_sucompat (bentrok tanda tangan)"
+log "3 simbol di-rename agar tidak menabrak tanda tangan KernelSU-Next"
+
 if ! git apply --verbose "$SUSFS_P/50.patch" 2> "$WORKDIR/patch50.err"; then
     cat "$WORKDIR/patch50.err" >&2
     find fs security kernel mm block drivers -name '*.rej' 2>/dev/null | head -40 >&2
@@ -142,7 +181,7 @@ sh "$WORKDIR/nomount-setup.sh" "$NOMOUNT_SHA" || die "setup.sh NoMount gagal"
 grep -q 'fs/nomount/Kconfig' fs/Kconfig || die "source fs/nomount/Kconfig tidak masuk ke fs/Kconfig"
 grep -q 'nomount' fs/Makefile || die "obj NOMOUNT tidak masuk ke fs/Makefile"
 GOT_NM=$(git -C NoMount rev-parse HEAD)
-if [ "$GOT_NM" != "$NOMOUNT_SHA" ]; then
+if ! sha_match "$NOMOUNT_SHA" "$GOT_NM"; then
     die "NoMount salah checkout: dapat $GOT_NM, harusnya $NOMOUNT_SHA"
 fi
 log "NoMount OK: $GOT_NM"
