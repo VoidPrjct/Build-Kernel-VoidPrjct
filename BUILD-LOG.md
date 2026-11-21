@@ -572,3 +572,66 @@ Diperiksa bahwa semuanya memang dibangun pada konfigurasi ini, jadi hasilnya
 bukan false positive: `block/ioprio.o` ada di `obj-y`, `fs/proc/bootconfig.o`
 di bawah `CONFIG_BOOT_CONFIG=y` (aktif di gki_defconfig), `drivers/input/input.o`
 lewat `input-core-y`, dan sisanya berkas inti yang selalu dibangun.
+
+---
+
+## Run 44932548141 — mode=check — HIJAU, dan cakupannya diperluas
+
+Langkah 9 lolos seluruhnya. Bukti dari log, bukan dari asumsi:
+
+- `== security/selinux/ (flask.h + av_permissions.h) ==` — header SELinux terbangun.
+- `== drivers/kernelsu/ ==` — seluruh berkas KernelSU-Next + `susfs_compat.o`.
+- `== fs/susfs.o ==` — inti SUSFS.
+- `== berkas yang diubah patch 50 (26) ==` — 26 target, dan **semuanya benar-benar
+  dikompilasi** (diperiksa satu per satu dari log: `fs/exec.o`, `fs/open.o`,
+  `fs/stat.o`, `fs/read_write.o`, `fs/statfs.o`, `fs/super.o`, `fs/namei.o`,
+  `fs/namespace.o`, `kernel/sys.o`, `kernel/reboot.o`, `kernel/kallsyms.o`,
+  `mm/memory.o`, `block/ioprio.o`, `drivers/input/input.o`,
+  `security/selinux/avc.o`, `security/selinux/hooks.o`, dst).
+- 88 baris `CC`, **nol `warning:`**.
+
+Dengan `CONFIG_WERROR=y` (default y di fork ini), hasil ini berarti kode yang
+ditambahkan patch 50 bersih dari peringatan dengan Clang 24 — risiko yang
+sebelumnya hanya akan muncul sebagai kegagalan setelah build penuh.
+
+Konfigurasi yang ikut diverifikasi: `CONFIG_CFI_CLANG=y` bersama ThinLTO,
+seluruh `CONFIG_KSU_SUSFS_*`, `CONFIG_NOMOUNT`, `CONFIG_MODVERSIONS`,
+`CONFIG_WERROR`.
+
+### Langkah 12 (packaging) diuji sungguhan secara lokal
+
+Langkah itu belum pernah dijalankan di CI, jadi diuji di sini dengan `Image`
+palsu 8 MiB dan AnyKernel3 SHA yang dipin:
+
+```
+[ak3] AnyKernel3: 41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1
+[ak3] Image: 8388608 byte
+[ak3] ukuran: 11485778 byte -> out.zip
+```
+
+Diperiksa di dalam zip: `Image` utuh 8388608 byte, `META-INF/com/google/android/
+update-binary`, `anykernel.sh`, `tools/`, tanpa `.git`. Nilai di `anykernel.sh`:
+`do.devicecheck=0`, `do.modules=0`, `do.systemless=1`, `BLOCK=boot`,
+`IS_SLOT_DEVICE=auto`, `kernel.string=VoidPrjct-Scarlet 5.10.272 (...)` tanpa
+kutip, satu `device.name1`, tanpa `device.name2..5`. Jadi langkah 12 bukan lagi
+asumsi.
+
+### Pemeriksaan link yang tidak bisa ditangkap kompilasi terarah
+
+- `setup_selinux` (`selinux/selinux.c:129`) dan `ksu_cred` (`core/init.c:77`)
+  yang dipanggil `fs/susfs.c` benar-benar global, bukan `static`.
+- `disable_seccomp` memang `static` (`policy/app_profile.c:80`), dan kode kita
+  tidak memanggilnya.
+- `susfs_compat_init` satu-satunya `__init`, hanya dipanggil `late_initcall`.
+- Konvensi `ksu_handle_sys_reboot` identik patch 10 dan cocok dengan pemanggil
+  patch 50 (`if (ret) goto orig_flow; return ret;`): 0 = dilayani SUSFS.
+- Tiga stub (`ksu_handle_stat`, `ksu_handle_faccessat`, `ksu_handle_vfs_fstat`)
+  berada di balik static key yang mati, jadi tidak menghilangkan fungsionalitas
+  yang aktif.
+
+### Cache ccache ditambahkan
+
+Sebelumnya ccache dipakai tetapi tidak disimpan antar-run, jadi setiap percobaan
+membayar ~1 jam lagi dari nol. Sekarang `.ccache` di-cache dengan kunci yang
+memuat SHA yang dipin + `restore-keys`, dan `continue-on-error` supaya kegagalan
+cache tidak menggagalkan build.

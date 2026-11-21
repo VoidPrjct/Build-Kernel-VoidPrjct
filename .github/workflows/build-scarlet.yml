@@ -219,6 +219,23 @@ jobs:
           } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           echo "kompilasi terarah OK"
 
+      # ccache tanpanya berarti setiap percobaan membayar ~1 jam lagi dari nol.
+      # Kuncinya memuat SHA yang dipin, jadi percobaan ulang pada sumber yang sama
+      # memakai kembali hasil kompilasi sebelumnya; restore-keys menjaga cache
+      # lama tetap terpakai kalau kunci berubah (mis. setelah commit perbaikan).
+      # continue-on-error: kegagalan cache tidak boleh menggagalkan build.
+      - name: Cache ccache
+        if: inputs.mode == 'build'
+        continue-on-error: true
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ env.KSU_SHA }}-${{ env.SUSFS_COMMIT }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ env.KSU_SHA }}-${{ env.SUSFS_COMMIT }}-
+            ccache-${{ env.KSU_SHA }}-
+            ccache-
+
       - name: Bangun kernel
         if: inputs.mode == 'build'
         env:
