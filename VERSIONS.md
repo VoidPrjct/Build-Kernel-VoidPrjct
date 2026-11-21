@@ -45,6 +45,21 @@ Konsekuensi: SUSFS **built-in** dipakai lewat patch 50 (sisi kernel). Sisi Kerne
 patch 10 tidak bisa dipasang, jadi bagian yang dibutuhkan ditulis ulang di
 `scripts/susfs_compat.c` terhadap API KernelSU-Next. Lihat `BUILD-LOG.md`.
 
+## Uji device
+
+| Item | Hasil |
+|---|---|
+| Status | **berhasil boot dan berjalan** (dilaporkan pemilik, 2026-11-21) |
+| Build | run `44942666978`, zip `VoidPrjct-Scarlet-5.10.272-20261121.zip` |
+| Kernel berjalan | `5.10.272-gb1f875995dfb` (cocok dengan pin base) |
+| Android | 15 (API 35), aarch64 |
+| KernelSU-Next | `Working` `BUILT-IN (GKI2)` `v3.4.2 (33555-6)`, hook `Tracepoint` |
+| SUSFS | `Supported \| v2.4.0 (GKI)` — handshake versi berjalan |
+| NoMount | metamodule `Installed \| NoMount v2.3.1 (785)` |
+| SELinux | `Enforcing` |
+
+Belum diuji: fungsi SUSFS satu per satu, dan device selain yang diuji di atas.
+
 ## Keputusan yang diambil pemilik
 
 1. **Langsung full stack** — KSU-Next + SUSFS + NoMount ditulis sekaligus (bukan baseline dulu).

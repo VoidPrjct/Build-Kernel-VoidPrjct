@@ -857,3 +857,59 @@ perbandingan harus dilakukan terhadap zip di dalamnya, bukan berkas artifact.)
   `44933068033`. Perubahan setelah itu hanya di `integrate.sh` (`sed` pada
   `feature/selinux_hide.c` yang berada di `KernelSU-Next/`, dikecualikan dari
   commit), jadi isi sisi kernel branch itu tidak berubah.
+
+---
+
+## UJI DEVICE — dilaporkan pemilik, 2026-11-21 (03:14)
+
+Kernel dari run 44942666978 dipasang dan dijalankan. Bukti: tangkapan layar
+manager KernelSU-Next, dilaporkan pemilik dengan ringkasan "no mount sukses,
+ksu sukses, susfs sukses".
+
+Yang **terlihat langsung** pada tangkapan layar (bukan kesimpulan saya):
+
+| Item | Nilai |
+|---|---|
+| Status KernelSU-Next | `Working` + label `BUILT-IN (GKI2)` |
+| Versi KernelSU-Next | `v3.4.2 (33555-6)` |
+| Versi Manager | `v3.4.2-200-g32e25d58-spoofed (33555-6)` |
+| Hook mode | `Tracepoint` |
+| Metamodule | `Installed \| NoMount \| v2.3.1 (785)` |
+| SUSFS | `Supported \| v2.4.0 (GKI)` |
+| Versi kernel | `5.10.272-gb1f875995dfb (aarch64)` |
+| Android | `15 (35)` |
+| SELinux | `Enforcing` |
+| Superuser / Modules | 0 / 8 |
+
+### Bukti yang paling penting
+
+1. **Versi kernel `5.10.272-gb1f875995dfb` cocok dengan pin base**
+   `b1f875995dfb999f995404924836d959fece46a5`. Jadi yang berjalan memang kernel
+   hasil build kita, bukan kernel lain.
+2. **`BUILT-IN (GKI2)`** — KernelSU-Next memang tertanam di kernel, bukan modul.
+   Ini menutup kekhawatiran `CONFIG_KSU=y` vs `m` (kalau `m`, link `fs/susfs.c`
+   ke `susfs_is_current_ksu_domain()` akan gagal).
+3. **`SUSFS Supported | v2.4.0 (GKI)`** — ini handshake versi SUSFS. Manager
+   mengirim perintah `CMD_SUSFS_SHOW_VERSION` melalui syscall `reboot()` dengan
+   `KSU_INSTALL_MAGIC1` + `SUSFS_MAGIC`; jalur itu masuk ke `ksu_handle_sys_reboot`
+   (patch 50, `kernel/reboot.c`) lalu ke `susfs_show_version()` (`fs/susfs.c`).
+   Artinya jalur runtime SUSFS benar-benar hidup dan menjawab, bukan sekadar
+   berhasil di-link.
+
+### Risiko yang ditandai sebelumnya, sekarang terjawab
+
+- "Tab SUSFS manager mungkin tidak mengenali SUSFS built-in (bukan LKM) sebagai
+  aktif" → **tidak terjadi**. Manager melaporkan `Supported | v2.4.0 (GKI)`
+  walaupun `susfs_guard_lkm` sengaja dibuang dan SUSFS ditanam lewat patch 50.
+
+### Yang BELUM dibuktikan (tidak boleh diklaim)
+
+- Fungsi SUSFS satu per satu: `SUS_PATH`, `SUS_MOUNT`, `SUS_KSTAT`,
+  `SPOOF_UNAME`, `SPOOF_CMDLINE_OR_BOOTCONFIG`, `OPEN_REDIRECT`, `SUS_MAP`,
+  `PRIORITY_UID_FILTER`. Yang terbukti adalah SUSFS dikenali dan menjawab
+  handshake versi, plus NoMount terpasang sebagai metamodule — bukan bahwa setiap
+  fitur penyamaran bekerja.
+- Hanya satu device yang diuji. Device lain, khususnya non-GKI atau generasi GKI
+  berbeda, belum diuji dan tetap tidak dijamin bisa boot.
+- Fitur SUSFS yang bergantung pada sucompat KernelSU (`susfs_compat.c` adalah
+  kode porting, bukan patch 10 asli) belum diuji secara fungsional.
