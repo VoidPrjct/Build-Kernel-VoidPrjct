@@ -225,7 +225,7 @@ jobs:
           ZIP="$PWD/VoidPrjct-Scarlet-${KVER}-${DATE}.zip"
           KERNEL_VERSION="$KVER" ./scripts/package-anykernel.sh "$KERNEL_DIR" "$ZIP"
           # GITHUB_OUTPUT dipakai untuk langkah berikut yang membutuhkan nilai ini
-          # di ekspresi (${{ }}). Nilai dari GITHUB_ENV hanya masuk ke environment
+          # di ekspresi langkah. Nilai dari GITHUB_ENV hanya masuk ke environment
           # proses, bukan ke konteks ekspresi, jadi jangan diandalkan di sana.
           {
             echo "zip=$ZIP"
