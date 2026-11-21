@@ -1,0 +1,230 @@
+name: build-scarlet
+
+# Pipeline PRD §7. Build jalan di runner GitHub, tidak pernah di device.
+# mode=check hanya memasang integrasi + memverifikasi config (cepat, tanpa build).
+# mode=build menghasilkan Image dan zip AnyKernel3.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = pasang integrasi + verifikasi config saja; build = sampai Image"
+        type: choice
+        options: [check, build]
+        default: check
+      kernel_branch:
+        description: "Branch di fork kernel"
+        type: string
+        default: android12-5.10
+      ksu_sha:
+        description: "SHA KernelSU-Next"
+        type: string
+        default: 32e25d58fc1a187e1abe7278904c31571235fc83
+      susfs_commit:
+        description: "Commit susfs4ksu (v2.4.0 = 45a05753)"
+        type: string
+        default: 45a05753
+      nomount_sha:
+        description: "SHA NoMount"
+        type: string
+        default: 6849f00a342b
+      push_integration:
+        description: "Push hasil integrasi ke branch scarlet/android12-5.10"
+        type: boolean
+        default: false
+      create_release:
+        description: "Buat GitHub Release (hanya mode=build)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-scarlet-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  KSU_SHA: ${{ inputs.ksu_sha }}
+  SUSFS_COMMIT: ${{ inputs.susfs_commit }}
+  NOMOUNT_SHA: ${{ inputs.nomount_sha }}
+  AK3_SHA: 41f04bdb4ee3
+  NEUTRON_TAG: "06092026"
+  NEUTRON_ASSET: neutron-clang-06092026.tar.zst
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repo build
+        uses: actions/checkout@v4
+
+      - name: Bebaskan disk + pasang dependensi
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev \
+            ccache zip unzip cpio lz4 xz-utils python3 zstd
+          df -h /
+
+      - name: Checkout fork kernel
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "${{ inputs.kernel_branch }}" \
+            "https://x-access-token:${{ secrets.KERNEL_PAT }}@github.com/VoidPrjct/android_kernel_common-5.10.git" kernel
+          cd kernel
+          echo "KERNEL_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          KVER=$(awk -F' = ' '/^VERSION =/{v=$2} /^PATCHLEVEL =/{p=$2} /^SUBLEVEL =/{s=$2} END{print v"."p"."s}' Makefile)
+          echo "KVER=$KVER" >> "$GITHUB_ENV"
+          echo "kernel $KVER @ $(git rev-parse --short HEAD)"
+
+      - name: Pasang integrasi (KSU-Next + SUSFS + NoMount)
+        env:
+          KERNEL_DIR: ${{ github.workspace }}/kernel
+          WORKDIR: ${{ runner.temp }}/scarlet
+        run: |
+          set -euo pipefail
+          chmod +x scripts/*.sh
+          ./scripts/integrate.sh 2>&1 | tee integration.log
+
+      - name: Cache toolchain Neutron
+        if: inputs.mode == 'build'
+        uses: actions/cache@v4
+        with:
+          path: toolchain/neutron
+          key: neutron-${{ env.NEUTRON_TAG }}-${{ runner.os }}
+
+      - name: Unduh Neutron Clang
+        if: inputs.mode == 'build'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -x toolchain/neutron/bin/clang ]; then
+            echo "[tc] sudah ada dari cache"
+          else
+            mkdir -p toolchain
+            # PRD 6.5: ambil dari daftar asset release, jangan menebak nama.
+            gh release view "$NEUTRON_TAG" -R Neutron-Toolchains/clang-build-catalogue --json assets \
+              --jq '.assets[].name' | tee toolchain/assets.txt
+            gh release download "$NEUTRON_TAG" -R Neutron-Toolchains/clang-build-catalogue \
+              -p "$NEUTRON_ASSET" -D toolchain --clobber
+            mkdir -p toolchain/neutron
+            tar --zstd -xf "toolchain/$NEUTRON_ASSET" -C toolchain/neutron
+          fi
+          export PATH="$PWD/toolchain/neutron/bin:$PATH"
+          clang --version | tee clang-version.txt
+
+      - name: Bangun kernel
+        if: inputs.mode == 'build'
+        env:
+          KERNEL_DIR: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          export PATH="$PWD/toolchain/neutron/bin:$PATH"
+          export CCACHE_DIR="$PWD/.ccache"
+          export CCACHE_MAXSIZE=5G
+          ccache --version | head -1
+          cd kernel
+
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
+
+          # dijalankan dari root kernel; fragment ada di repo build
+          ARCH=arm64 scripts/kconfig/merge_config.sh -m -O out out/.config "$GITHUB_WORKSPACE/scripts/scarlet.fragment"
+
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
+
+          "$GITHUB_WORKSPACE/scripts/verify-config.sh" out/.config
+
+          set -o pipefail
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" Image 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Cek hasil build
+        if: inputs.mode == 'build'
+        run: |
+          set -euo pipefail
+          ls -l kernel/out/arch/arm64/boot/Image
+          ccache -s || true
+
+      - name: Package AnyKernel3
+        if: inputs.mode == 'build'
+        env:
+          KERNEL_DIR: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y%m%d)
+          ZIP="$PWD/VoidPrjct-Scarlet-${KVER}-${DATE}.zip"
+          KERNEL_VERSION="$KVER" ./scripts/package-anykernel.sh "$KERNEL_DIR" "$ZIP"
+          echo "ZIP_PATH=$ZIP" >> "$GITHUB_ENV"
+          echo "TAG=scarlet-${KVER}-${DATE}" >> "$GITHUB_ENV"
+
+      - name: Unggah artifact (zip)
+        if: inputs.mode == 'build'
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoidPrjct-Scarlet-${{ env.KVER }}
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error
+
+      - name: Unggah log (walau gagal)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            integration.log
+            build.log
+            clang-version.txt
+          if-no-files-found: warn
+
+      - name: Push branch integrasi ke fork
+        if: inputs.push_integration && success()
+        run: |
+          set -euo pipefail
+          cd kernel
+          git config user.name "VoidPrjct build bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # KernelSU/ dan NoMount/ adalah clone terpisah; jangan ikut di-commit.
+          printf 'KernelSU/\nNoMount/\nout/\n' >> .git/info/exclude
+          git checkout -B scarlet/android12-5.10
+          git add -A
+          if git diff --cached --quiet; then
+            echo "tidak ada perubahan untuk di-commit"
+          else
+            git commit -m "scarlet: integrasi KernelSU-Next ${KSU_SHA:0:12} + SUSFS ${SUSFS_COMMIT} + NoMount ${NOMOUNT_SHA:0:12}"
+            git push --force origin HEAD:refs/heads/scarlet/android12-5.10
+          fi
+
+      - name: Buat rilis
+        if: inputs.create_release && inputs.mode == 'build' && success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cat > RELEASE_NOTES.md <<EOF
+          VoidPrjct-Scarlet ${KVER}
+
+          Komponen:
+          - KernelSU-Next: ${KSU_SHA}
+          - SUSFS: ${SUSFS_COMMIT} (v2.4.0, built-in via patch 50)
+          - NoMount: ${NOMOUNT_SHA} (built-in)
+          - Kernel base: ${KERNEL_SHA} (5.10.272)
+          - Neutron Clang: ${NEUTRON_TAG}
+          - AnyKernel3: ${AK3_SHA}
+
+          Status uji: BELUM DIUJI DI DEVICE.
+          Build hijau tidak berarti boot sukses.
+
+          anykernel.sh memakai do.devicecheck=0. Itu hanya melewati pengecekan
+          nama device. Device non-GKI atau beda generasi GKI tetap tidak akan boot.
+
+          Catatan: bagian sisi KernelSU dari patch SUSFS 2.4.0 tidak dipasang
+          (tidak cocok dengan KernelSU-Next). Penggantinya kode porting di
+          scripts/susfs_compat.c pada repo build.
+          EOF
+          gh release create "$TAG" "$ZIP_PATH" VERSIONS.md \
+            --title "VoidPrjct-Scarlet ${KVER}" \
+            --notes-file RELEASE_NOTES.md

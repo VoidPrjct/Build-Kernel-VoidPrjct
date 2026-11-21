@@ -1,0 +1,35 @@
+# scarlet.fragment — config fragment VoidPrjct-Scarlet
+# Digabung lewat scripts/kconfig/merge_config.sh setelah `make gki_defconfig`,
+# lalu `make olddefconfig`. Simbol LTO sudah diverifikasi ada di arch/Kconfig
+# pada commit base b1f875995dfb. Simbol KSU_SUSFS_* diambil dari hunk Kconfig
+# di 10_susfs.patch (satu-satunya tempat daftar resminya).
+
+## KernelSU-Next: built-in, bukan LKM (PRD 6.2)
+CONFIG_KSU=y
+
+## SUSFS built-in (PRD 6.3) — daftar dari Kconfig hasil patch, bukan dari ingatan
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
+CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y
+
+## NoMount built-in (PRD 6.4)
+CONFIG_NOMOUNT=y
+
+## LTO thin (PRD 6.5). Folder arch/Kconfig pada base commit:
+##   config LTO (629), LTO_CLANG (634), LTO_NONE (680),
+##   LTO_CLANG_FULL (685), LTO_CLANG_THIN (704)
+CONFIG_LTO_CLANG=y
+CONFIG_LTO_CLANG_THIN=y
+# CONFIG_LTO_CLANG_FULL is not set
+# CONFIG_LTO_NONE is not set
+
+## Modul vendor tetap mau dimuat walau suffix rilis berubah (PRD 6.1)
+CONFIG_MODVERSIONS=y
