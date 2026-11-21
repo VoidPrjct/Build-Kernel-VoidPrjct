@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "check = pasang integrasi + verifikasi config saja; build = sampai Image"
+        description: "check = integrasi + verifikasi config + kompilasi terarah; build = sampai Image"
         type: choice
         options: [check, build]
         default: check
@@ -91,14 +91,12 @@ jobs:
           ./scripts/integrate.sh 2>&1 | tee integration.log
 
       - name: Cache toolchain Neutron
-        if: inputs.mode == 'build'
         uses: actions/cache@v4
         with:
           path: toolchain/neutron
           key: neutron-${{ env.NEUTRON_TAG }}-${{ runner.os }}
 
       - name: Unduh Neutron Clang
-        if: inputs.mode == 'build'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -123,6 +121,52 @@ jobs:
           clang --version | tee clang-version.txt
           echo "bin dir: $BIN_DIR"
 
+      - name: Siapkan konfigurasi
+        env:
+          KERNEL_DIR: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          export PATH="${NEUTRON_BIN}:$PATH"
+          cd kernel
+
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
+
+          # dijalankan dari root kernel; fragment ada di repo build
+          ARCH=arm64 scripts/kconfig/merge_config.sh -m -O out out/.config "$GITHUB_WORKSPACE/scripts/scarlet.fragment"
+
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
+
+          "$GITHUB_WORKSPACE/scripts/verify-config.sh" out/.config
+
+      # Mode check: kompilasi hanya bagian yang paling mungkin salah -- berkas
+      # porting kita sendiri dan fs/susfs.c hasil patch 50. Ini menangkap error
+      # kompilasi dalam hitungan menit, bukan setelah build penuh.
+      - name: Kompilasi terarah (mode check)
+        if: inputs.mode == 'check'
+        env:
+          KERNEL_DIR: ${{ github.workspace }}/kernel
+        run: |
+          set -euo pipefail
+          export PATH="${NEUTRON_BIN}:$PATH"
+          export CCACHE_DIR="$PWD/.ccache"
+          export CCACHE_MAXSIZE=5G
+          cd kernel
+          set -o pipefail
+          # Fungsi, bukan variabel: 'CC="ccache clang"' harus tetap satu argumen
+          # dan harus lewat command line supaya tidak ditimpa Makefile saat LLVM=1.
+          mk() { make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" "$@"; }
+          {
+            echo "== make prepare =="
+            mk prepare
+            echo "== drivers/kernelsu/susfs_compat.o =="
+            mk drivers/kernelsu/susfs_compat.o
+            echo "== fs/susfs.o =="
+            mk fs/susfs.o
+            echo "== drivers/kernelsu/kernelsu.o =="
+            mk drivers/kernelsu/kernelsu.o
+          } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          echo "kompilasi terarah OK"
+
       - name: Bangun kernel
         if: inputs.mode == 'build'
         env:
@@ -134,15 +178,6 @@ jobs:
           export CCACHE_MAXSIZE=5G
           ccache --version | head -1
           cd kernel
-
-          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 gki_defconfig
-
-          # dijalankan dari root kernel; fragment ada di repo build
-          ARCH=arm64 scripts/kconfig/merge_config.sh -m -O out out/.config "$GITHUB_WORKSPACE/scripts/scarlet.fragment"
-
-          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
-
-          "$GITHUB_WORKSPACE/scripts/verify-config.sh" out/.config
 
           set -o pipefail
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC="ccache clang" Image 2>&1 | tee "$GITHUB_WORKSPACE/build.log"

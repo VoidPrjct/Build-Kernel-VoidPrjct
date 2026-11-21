@@ -22,7 +22,9 @@ Tidak ada kompilasi di device. Semua build lewat GitHub Actions.
 
 Actions → `build-scarlet` → Run workflow.
 
-- `mode: check` — hanya memasang integrasi dan memverifikasi config. Cepat (~5 menit).
+- `mode: check` — memasang integrasi, memverifikasi config, dan **mengompilasi
+  objek paling berisiko** (`drivers/kernelsu/susfs_compat.o`, `fs/susfs.o`,
+  `drivers/kernelsu/kernelsu.o`) tanpa membangun `Image`. Beberapa menit.
 - `mode: build` — sampai `Image` dan zip AnyKernel3. Lama.
 
 Pin default sudah terisi. `susfs_commit` = `45a05753` adalah commit "Bump version to 2.4.0".
