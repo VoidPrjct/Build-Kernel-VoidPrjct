@@ -237,14 +237,16 @@ jobs:
           echo "kompilasi terarah OK"
 
       # ccache tanpanya berarti setiap percobaan membayar ~1 jam lagi dari nol.
-      # Kuncinya memuat SHA yang dipin, jadi percobaan ulang pada sumber yang sama
-      # memakai kembali hasil kompilasi sebelumnya; restore-keys menjaga cache
-      # lama tetap terpakai kalau kunci berubah (mis. setelah commit perbaikan).
-      # continue-on-error: kegagalan cache tidak boleh menggagalkan build.
-      - name: Cache ccache
+      # Dipisah restore/save dengan sengaja: post-step actions/cache dilewati
+      # ketika job gagal, jadi cache tidak pernah tersimpan pada build yang gagal
+      # -- padahal justru itu yang paling butuh. Simpan eksplisit dengan
+      # 'if: always()'. continue-on-error: kegagalan cache tidak boleh
+      # menggagalkan build.
+      - name: Pulihkan ccache
         if: inputs.mode == 'build'
+        id: ccache
         continue-on-error: true
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
           key: ccache-${{ env.KSU_SHA }}-${{ env.SUSFS_COMMIT }}-${{ github.sha }}
@@ -280,6 +282,18 @@ jobs:
           set -euo pipefail
           ls -l kernel/out/arch/arm64/boot/Image
           ccache -s || true
+
+      # Diletakkan setelah kompilasi: ccache baru berisi sesuatu setelah build.
+      # 'if: always()' supaya build yang gagal pun tetap menyimpan hasil
+      # kompilasi sebagian -- post-step actions/cache dilewati saat job gagal,
+      # dan justru build yang gagal itu yang paling butuh cache.
+      - name: Simpan ccache
+        if: always() && inputs.mode == 'build'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Package AnyKernel3
         id: package

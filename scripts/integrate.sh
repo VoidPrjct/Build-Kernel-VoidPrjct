@@ -135,6 +135,44 @@ grep -qE '\bksu_handle_execveat_sucompat\b' "$SUSFS_P/50.patch" \
     && die "masih ada ksu_handle_execveat_sucompat (bentrok tanda tangan)"
 log "3 simbol di-rename agar tidak menabrak tanda tangan KernelSU-Next"
 
+# --- Buka tiga simbol selinux_hide.c yang dibutuhkan patch 50 ---------------
+# patch 50 (security/selinux/selinuxfs.c) mendeklarasikan:
+#   extern struct page *fake_status;
+#   extern struct static_key_false fake_status_initialize_key;
+#   extern void initialize_fake_status(void);
+#
+# Ketiganya ADA di feature/selinux_hide.c KernelSU-Next, tetapi `static` --
+# persis seperti KernelSU resmi sebelum patch 10 membukanya (lihat diff patch 10
+# pada kernel/feature/selinux_hide.c: `-static ...` menjadi `+...`).
+# Patch 10 tidak bisa dipasang ke KernelSU-Next, jadi bagian itu dikerjakan di
+# sini. Tanpa ini vmlinux gagal link:
+#   run 44933625571: undefined symbol fake_status, fake_status_initialize_key,
+#   initialize_fake_status.
+#
+# Catatan: ksu_selinux_hide_enabled/_running sengaja TIDAK dibuka. Keduanya
+# tetap `static` milik KernelSU-Next, dan patch 50 membaca variabel milik
+# scripts/susfs_compat.c (false). Dengan begitu jalur selinuxfs milik patch 50
+# tidak ikut berjalan berdampingan dengan kprobe selinux_hide milik KernelSU-Next.
+SH="$KSU_DIR/kernel/feature/selinux_hide.c"
+[ -f "$SH" ] || die "feature/selinux_hide.c tidak ditemukan di $SH"
+
+sed -i -E \
+  -e 's/^static DEFINE_STATIC_KEY_FALSE\(fake_status_initialize_key\);/DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);/' \
+  -e 's/^static struct page \*fake_status = NULL;/struct page *fake_status = NULL;/' \
+  -e 's/^static void initialize_fake_status\(\)/void initialize_fake_status(void)/' \
+  "$SH"
+
+grep -q '^DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);' "$SH" \
+    || die "fake_status_initialize_key masih static (pola file berubah?)"
+grep -q '^struct page \*fake_status = NULL;' "$SH" \
+    || die "fake_status masih static (pola file berubah?)"
+grep -q '^void initialize_fake_status(void)' "$SH" \
+    || die "initialize_fake_status masih static (pola file berubah?)"
+if grep -qE '^static (struct page \*fake_status|void initialize_fake_status)' "$SH"; then
+    die "masih ada definisi static untuk simbol fake_status*"
+fi
+log "3 simbol selinux_hide dibuka untuk patch 50 (fake_status*)"
+
 if ! git apply --verbose "$SUSFS_P/50.patch" 2> "$WORKDIR/patch50.err"; then
     cat "$WORKDIR/patch50.err" >&2
     find fs security kernel mm block drivers -name '*.rej' 2>/dev/null | head -40 >&2

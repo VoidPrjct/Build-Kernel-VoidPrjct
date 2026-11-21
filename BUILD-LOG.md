@@ -683,3 +683,95 @@ Ketiga kasus diuji lokal: Image valid lolos, magic hilang ditolak
 
 Pemeriksaan yang sama dipakai untuk memeriksa artifact build penuh, karena build
 yang sedang berjalan memakai commit sebelum perubahan ini.
+
+---
+
+## Run 44933625571 — mode=build — GAGAL di link `vmlinux` (bukan di kompilasi)
+
+Tahap yang belum pernah dicapai sebelumnya berjalan sampai akhir: seluruh
+kompilasi selesai, `LTO vmlinux.o` selesai, `MODPOST` selesai. Yang gagal adalah
+link final:
+
+```
+ld.lld: error: undefined symbol: fake_status_initialize_key
+>>> referenced by irqbypass.c
+>>> did you mean: fake_status_initialize_key
+>>> defined in: vmlinux.o
+
+ld.lld: error: undefined symbol: fake_status
+>>> referenced by selinuxfs.c:244 (../security/selinux/selinuxfs.c:244)
+
+ld.lld: error: undefined symbol: initialize_fake_status
+>>> referenced by selinuxfs.c:260 (../security/selinux/selinuxfs.c:260)
+>>> did you mean: initialize_fake_status
+>>> defined in: vmlinux.o
+```
+
+### Akar masalah
+
+`security/selinux/selinuxfs.c` pada patch 50 mendeklarasikan:
+
+```
+extern struct page *fake_status;
+extern struct static_key_false fake_status_initialize_key;
+extern void initialize_fake_status(void);
+```
+
+Ketiganya **ada** di `feature/selinux_hide.c` KernelSU-Next, tetapi `static`.
+Patch 10 menyelesaikan ini pada KernelSU resmi dengan cara yang sama: membuka
+ketiganya (`-static ...` menjadi `+...`). Karena patch 10 tidak bisa dipasang ke
+KernelSU-Next, bagian itu tidak pernah terjadi di build kita.
+
+### Mengapa audit simbol sebelumnya melewatkannya
+
+Audit saya memeriksa simbol berawalan `susfs_` dan 18 simbol `ksu_*`. Ketiga nama
+di atas tidak berawalan keduanya, jadi tidak masuk daftar periksa. Ini kesalahan
+cakupan audit, bukan kesalahan patch. Pesan linker "did you mean ... defined in
+vmlinux.o" menyesatkan: simbol itu memang ada sebagai `static`, sehingga tidak
+punya simbol global untuk di-relokasi.
+
+### Audit ulang yang benar (semua `extern` patch 50)
+
+Daripada menambal satu per satu, saya ambil **seluruh 52 `extern`** dari baris
+tambahan patch 50 dan periksa penyedianya. Hasil: hanya tiga simbol `fake_status*`
+yang tanpa penyedia. Kandidat lain yang sempat muncul adalah positif palsu
+detektor saya, dan sudah diperiksa langsung:
+
+| Simbol | Status |
+|---|---|
+| `selinux_state` | tipe (bukan simbol) |
+| `susfs_is_inode_sus_kstat` | `fs/susfs.c:703`, format `__attribute__((hot))` |
+| `susfs_is_inode_sus_path` | `fs/susfs.c:368` |
+| `susfs_ksu_sid` / `susfs_priv_app_sid` | `susfs_compat.c:110/114` (`__read_mostly` di antara nama dan `=`) |
+| `susfs_srcu_open_redirect` | `fs/susfs.c:1056` (`DEFINE_SRCU`) |
+
+### Perbaikan
+
+`integrate.sh` sekarang membuka tiga simbol itu pada salinan KernelSU-Next,
+dengan assertion per pola supaya perubahan format berkas hulu terdeteksi:
+
+```
+-static DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
++DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);
+-static struct page *fake_status = NULL;
++struct page *fake_status = NULL;
+-static void initialize_fake_status()
++void initialize_fake_status(void)
+```
+
+Diuji lokal terhadap `feature/selinux_hide.c` asli: tepat tiga baris berubah,
+ketiga assertion lolos, tidak ada sisa definisi `static`.
+
+`ksu_selinux_hide_enabled/_running` sengaja **tidak** dibuka: keduanya tetap
+`static` milik KernelSU-Next, dan patch 50 membaca variabel milik
+`susfs_compat.c` (false). Dengan begitu jalur selinuxfs versi patch 50 tidak
+berjalan berdampingan dengan kprobe selinux_hide milik KernelSU-Next. Kalau
+keduanya dibuka, akan ada dua definisi global dengan nama sama (gagal link).
+
+### Cache ccache
+
+Post-step `actions/cache` dilewati ketika job gagal (terlihat di run ini:
+"Post Cache ccache -> skipped"), sehingga build yang gagal tidak menyimpan
+ccache — padahal justru itu yang paling membutuhkan. Sekarang dipisah menjadi
+`actions/cache/restore` + `actions/cache/save` eksplisit dengan `if: always()`
+dan `continue-on-error`.
