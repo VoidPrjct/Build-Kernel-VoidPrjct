@@ -775,3 +775,85 @@ Post-step `actions/cache` dilewati ketika job gagal (terlihat di run ini:
 ccache — padahal justru itu yang paling membutuhkan. Sekarang dipisah menjadi
 `actions/cache/restore` + `actions/cache/save` eksplisit dengan `if: always()`
 dan `continue-on-error`.
+
+---
+
+## Run 44942666978 — mode=build + create_release — HIJAU, ZIP TERBIT
+
+Semua langkah berhasil, termasuk tiga yang belum pernah dieksekusi sebelumnya:
+`Bangun kernel` → `Cek hasil build` → `Package AnyKernel3` → `Unggah artifact`
+→ `Buat rilis`.
+
+### Konfirmasi perbaikan link dari log
+
+```
+[integrate] 3 simbol selinux_hide dibuka untuk patch 50 (fake_status*)
+```
+
+`fake_status` tidak lagi muncul di daftar error mana pun. Nol peringatan
+kompilasi di seluruh log (`warning:` selain whitespace/Node.js = tidak ada).
+
+### Konfigurasi terverifikasi
+
+```
+OK  CONFIG_LTO_CLANG=y
+OK  CONFIG_LTO_CLANG_THIN=y
+OK  CONFIG_LTO_CLANG_FULL tidak aktif
+OK  CONFIG_LTO_NONE tidak aktif
+OK  CONFIG_MODVERSIONS=y
+OK  CONFIG_WERROR=y
+OK  CONFIG_CFI_CLANG=y
+```
+
+Warning `Value of CONFIG_LTO_CLANG_THIN is redefined by fragment` adalah pesan
+normal `merge_config.sh`: baseline GKI memakai FULL LTO, fragment PRD memakai
+THIN. Justru itu yang diinginkan, dan `verify-config.sh` yang menegaskan hasil
+akhirnya (THIN aktif, FULL tidak).
+
+### Verifikasi artifact (bukan status hijau)
+
+Zip dari artifact CI diunduh, diekstrak, dan diperiksa isinya:
+
+| Periksa | Hasil |
+|---|---|
+| `Image` ada di zip | ada, **37.970.660 byte** |
+| magic arm64 `ARM\x64` di offset `0x38` | OK |
+| `image_size` header (37.748.736) ≤ ukuran berkas | OK |
+| `do.devicecheck=0` | OK |
+| `kernel.string` tanpa kutip | OK |
+| `device.name1` tunggal, tanpa `device.name2..5` | OK |
+| entri `.git` | tidak ada |
+| `tools/ak3-core.sh`, `META-INF/.../update-binary` | ada |
+
+### Verifikasi rilis
+
+```
+tag      : scarlet-5.10.272-20261121
+url      : https://github.com/VoidPrjct/Build-Kernel-VoidPrjct/releases/tag/scarlet-5.10.272-20261121
+aset     : VoidPrjct-Scarlet-5.10.272-20261121.zip (16.475.851 byte)
+           VERSIONS.md (3.326 byte)
+label    : "Status uji: BELUM DIUJI DI DEVICE." -> ada di catatan rilis
+```
+
+Aset rilis dibandingkan dengan zip di dalam artifact CI dengan SHA-256:
+
+```
+cb7a6fed6d040563ed6a40b16af6baaedb117d36ffde4c7d1317bc124a29cb29  (keduanya)
+```
+
+Byte-per-byte identik: yang terbit memang hasil build run ini, bukan berkas lain.
+(Catatan: artifact GitHub membungkus zip kernel di dalam zip lagi, jadi
+perbandingan harus dilakukan terhadap zip di dalamnya, bukan berkas artifact.)
+
+### Batas yang tetap ada (jujur)
+
+- Kernel ini **belum diuji di device**. Build hijau tidak membuktikan boot.
+- Bagian sisi KernelSU dari patch SUSFS 2.4.0 tidak dipasang; penggantinya
+  `scripts/susfs_compat.c`. Fitur SUSFS yang bergantung pada sucompat KernelSU
+  belum tentu setara.
+- Tab SUSFS di manager KernelSU-Next mungkin tidak mengenali SUSFS built-in
+  (bukan LKM) sebagai aktif.
+- Branch integrasi `scarlet/android12-5.10` masih di commit `ba5f9ef` dari run
+  `44933068033`. Perubahan setelah itu hanya di `integrate.sh` (`sed` pada
+  `feature/selinux_hide.c` yang berada di `KernelSU-Next/`, dikecualikan dari
+  commit), jadi isi sisi kernel branch itu tidak berubah.
