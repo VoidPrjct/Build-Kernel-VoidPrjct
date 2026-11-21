@@ -182,11 +182,15 @@ jobs:
           {
             echo "== make prepare =="
             mk prepare
-            # kernelsu.o adalah objek gabungan: make ini mengompilasi SEMUA
-            # berkas KernelSU-Next termasuk susfs_compat.c, sekaligus membuktikan
-            # penambahan 'kernelsu-objs += susfs_compat.o' benar-benar terbaca.
-            echo "== drivers/kernelsu/kernelsu.o =="
-            mk drivers/kernelsu/kernelsu.o
+            # Target direktori, bukan 'drivers/kernelsu/kernelsu.o': kbuild tidak
+            # punya aturan untuk objek gabungan sebagai target tunggal (run
+            # 44931056217: "No rule to make target .../kernelsu.o"). Target
+            # direktori membangun seluruh berkas KernelSU-Next, termasuk
+            # susfs_compat.c, sekaligus membuktikan 'kernelsu-objs += susfs_compat.o'
+            # benar-benar terbaca.
+            echo "== drivers/kernelsu/ =="
+            mk drivers/kernelsu/
+            # fs/susfs.o objek tunggal (bukan gabungan), jadi ini target yang sah.
             echo "== fs/susfs.o =="
             mk fs/susfs.o
           } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"

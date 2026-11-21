@@ -396,3 +396,44 @@ diam-diam.
 `arch/arm64/include/asm/thread_info.h` fork ini: bit tertinggi yang dipakai
 adalah **26** (`TIF_TAGGED_ADDR`), jadi 33–35 bebas. KernelSU-Next memakai bit
 63 (`TIF_KSU_DISABLE_ESCAPE_WITH_ROOT`), juga tidak bertabrakan.
+
+---
+
+## Run 44931056217 — mode=check — GAGAL di langkah 9 (kompilasi terarah)
+
+Kemajuan: langkah 7 (unduh toolchain) dan langkah 8 (konfigurasi + verifikasi
+config) **berhasil**. Kegagalan tinggal di kompilasi terarah:
+
+```
+== drivers/kernelsu/kernelsu.o ==
+-- KernelSU-Next version: 33555
+-- KernelSU-Next tag: v3.4.2
+make[4]: *** No rule to make target 'drivers/kernelsu/kernelsu.o'.  Stop.
+```
+
+Penyebab pastinya (diperiksa di `scripts/Makefile.build` fork ini, bukan
+ditebak): kbuild punya aturan generik
+
+```
+$(obj)/%.o: $(src)/%.c ... FORCE
+```
+
+yang dipakai untuk target objek tunggal. Untuk `kernelsu.o`, aturan itu butuh
+`drivers/kernelsu/kernelsu.c`, sedangkan di KernelSU-Next tidak ada berkas
+seperti itu: `kernelsu` adalah nama modul, sumbernya `kernelsu-objs`. Karena
+tidak ada sumber yang cocok, target itu memang tidak punya aturan. Jadi bukan
+karena "objek gabungan tidak didukung" — penjelasan pertama saya kurang tepat,
+dan saya catat yang benar.
+
+Perbaikan: pakai **target direktori** `make drivers/kernelsu/`, yang membangun
+`built-in.a` untuk direktori itu, dan karenanya membangun `kernelsu.o` beserta
+seluruh `kernelsu-objs` — termasuk `susfs_compat.o`. Ini sama sekali tidak
+bergantung pada aturan `%.o: %.c`, dan sekaligus membuktikan baris
+`kernelsu-objs += susfs_compat.o` yang kita tambahkan benar-benar terbaca.
+
+Untuk `fs/susfs.c` target satuan tetap dipakai (`make fs/susfs.o`) karena
+`fs/susfs.c` memang ada di pohon setelah integrasi, sehingga aturan generik tadi
+berlaku.
+
+Catatan lain dari run ini: kbuild melaporkan KernelSU-Next **v3.4.2** (versi
+33555), cocok dengan SHA yang dipin.
