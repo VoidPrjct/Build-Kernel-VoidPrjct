@@ -1,6 +1,6 @@
 name: build-scarlet
 
-# Pipeline PRD §7. Build jalan di runner GitHub, tidak pernah di device.
+# Pipeline PRD ยง7. Build jalan di runner GitHub, tidak pernah di device.
 # mode=check hanya memasang integrasi + memverifikasi config (cepat, tanpa build).
 # mode=build menghasilkan Image dan zip AnyKernel3.
 
@@ -282,6 +282,28 @@ jobs:
           set -euo pipefail
           ls -l kernel/out/arch/arm64/boot/Image
           ccache -s || true
+
+      # Nama kernel harus 5.10.272-VoidPrjct-Scarlet, tanpa "-g<hash>". Dicek dari
+      # out/include/config/kernel.release (ada setelah 'make prepare', jadi berlaku
+      # di mode check dan build). Di mode build, banner di dalam Image juga dicek:
+      # itu string yang tampil sebagai "Linux version" dan uname -r di device.
+      - name: Verifikasi nama kernel
+        run: |
+          set -euo pipefail
+          EXPECT="${KVER}-VoidPrjct-Scarlet"
+          REL=$(cat kernel/out/include/config/kernel.release)
+          echo "kernel.release = $REL (harus $EXPECT)"
+          if [ "$REL" != "$EXPECT" ]; then
+            echo "::error::kernel.release '$REL' bukan '$EXPECT'"
+            exit 1
+          fi
+          if [ "${{ inputs.mode }}" = "build" ]; then
+            if ! grep -a -F -q "Linux version ${EXPECT} " kernel/out/arch/arm64/boot/Image; then
+              echo "::error::banner 'Linux version ${EXPECT}' tidak ada di Image"
+              exit 1
+            fi
+            echo "banner Image OK: Linux version ${EXPECT}"
+          fi
 
       # Diletakkan setelah kompilasi: ccache baru berisi sesuatu setelah build.
       # 'if: always()' supaya build yang gagal pun tetap menyimpan hasil
