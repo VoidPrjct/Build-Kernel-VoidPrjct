@@ -33,3 +33,11 @@ CONFIG_LTO_CLANG_THIN=y
 
 ## Modul vendor tetap mau dimuat walau suffix rilis berubah (PRD 6.1)
 CONFIG_MODVERSIONS=y
+
+## Nama kernel: uname -r jadi 5.10.272-VoidPrjct-Scarlet.
+## Tanpa ini scripts/setlocalversion menempel "-g<12 hex commit>" (LOCALVERSION_AUTO=y,
+## default init/Kconfig; gki_defconfig tidak mengubahnya). Akibatnya Linux version,
+## uname -r, dan vermagic modul ikut berubah. MODVERSIONS=y (di bawah) membuat loader
+## modul melewati bagian rilis saat membandingkan vermagic.
+CONFIG_LOCALVERSION="-VoidPrjct-Scarlet"
+# CONFIG_LOCALVERSION_AUTO is not set
