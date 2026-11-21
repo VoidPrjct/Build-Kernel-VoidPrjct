@@ -40,7 +40,11 @@ WANT_Y=(
 WANT_NOTSET=(
   CONFIG_LTO_CLANG_FULL
   CONFIG_LTO_NONE
+  # Kalau aktif, "-g<hash>" ditempel setelah CONFIG_LOCALVERSION.
+  CONFIG_LOCALVERSION_AUTO
 )
+# Nama kernel: uname -r = <versi>-VoidPrjct-Scarlet.
+WANT_LOCALVERSION="-VoidPrjct-Scarlet"
 
 fail=0
 echo "[verify] memeriksa $CONFIG"
@@ -64,6 +68,14 @@ for s in "${WANT_NOTSET[@]}"; do
     fail=1
   fi
 done
+
+if grep -qxF "CONFIG_LOCALVERSION=\"${WANT_LOCALVERSION}\"" "$CONFIG"; then
+  printf '  OK      CONFIG_LOCALVERSION="%s"\n' "$WANT_LOCALVERSION"
+else
+  got=$(grep -E '^CONFIG_LOCALVERSION=' "$CONFIG" | head -1)
+  printf '  FAIL    CONFIG_LOCALVERSION harus "%s" (ditemukan: %s)\n' "$WANT_LOCALVERSION" "${got:-tidak ada}"
+  fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "[verify][FATAL] ada simbol yang tidak sesuai. olddefconfig kemungkinan membuangnya;"
