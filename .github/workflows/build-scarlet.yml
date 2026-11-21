@@ -169,6 +169,7 @@ jobs:
         if: inputs.mode == 'check'
         env:
           KERNEL_DIR: ${{ github.workspace }}/kernel
+          WORKDIR: ${{ runner.temp }}/scarlet
         run: |
           set -euo pipefail
           export PATH="${NEUTRON_BIN}:$PATH"
@@ -200,6 +201,21 @@ jobs:
             # fs/susfs.o objek tunggal (bukan gabungan), jadi ini target yang sah.
             echo "== fs/susfs.o =="
             mk fs/susfs.o
+
+            # Berkas yang diubah patch 50 ikut dikompilasi. Sebabnya CONFIG_WERROR
+            # default y di fork ini, jadi -Werror berlaku global: satu peringatan
+            # di fs/exec.c atau kernel/sys.c akan menggagalkan build penuh setelah
+            # sekitar satu jam. Daftarnya diturunkan dari patch 50 yang benar-benar
+            # dipakai, bukan dari daftar hafalan, supaya tetap benar kalau patch
+            # berubah.
+            P50="$WORKDIR/susfs4ksu/50.patch"
+            [ -f "$P50" ] || { echo "patch 50 tidak ada di $P50"; exit 1; }
+            mapfile -t PATCHED < <(grep -E '^diff --git' "$P50" | awk '{print $3}' \
+                | sed 's|^a/||' | grep '\.c$' | sed 's/\.c$/.o/' | grep -v '^fs/susfs\.o$')
+            [ "${#PATCHED[@]}" -gt 15 ] || { echo "daftar berkas patch 50 mencurigakan kecil: ${#PATCHED[@]}"; exit 1; }
+            echo "== berkas yang diubah patch 50 (${#PATCHED[@]}) =="
+            printf '   %s\n' "${PATCHED[@]}"
+            mk "${PATCHED[@]}"
           } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           echo "kompilasi terarah OK"
 

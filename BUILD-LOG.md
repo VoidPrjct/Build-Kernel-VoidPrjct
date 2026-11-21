@@ -546,3 +546,29 @@ terpaksa dimatikan, itu jadi keputusan yang tercatat dan menggagalkan verifikasi
 Catatan tambahan: `-Werror=implicit-function-declaration` aktif terlepas dari
 `CONFIG_WERROR` (Makefile baris 524), jadi setiap prototipe yang hilang tetap
 fatal. Audit simbol sebelumnya menutup risiko itu.
+
+---
+
+## Celah yang ditutup sebelum build penuh: berkas yang diubah patch 50
+
+`-Werror` global berarti satu peringatan di `fs/exec.c`, `kernel/sys.c`,
+`fs/stat.c`, dan 23 berkas lain yang disentuh patch 50 akan menggagalkan build
+penuh setelah sekitar satu jam. Mode check sebelumnya hanya mengompilasi
+`drivers/kernelsu/`, `fs/susfs.o`, dan `security/selinux/`, jadi berkas-berkas
+itu belum tersentuh.
+
+Sekarang mode check juga mengompilasi **semua** berkas `.c` yang diubah patch 50
+(26 berkas), dan daftarnya diturunkan dari patch yang benar-benar dipakai:
+
+```
+grep -E '^diff --git' "$P50" | awk '{print $3}' | sed 's|^a/||' \
+  | grep '\.c$' | sed 's/\.c$/.o/'
+```
+
+Kalau daftarnya kurang dari 16 berkas, langkah itu berhenti — penanda bahwa
+patch 50 berubah bentuk, bukan diam-diam melewatkan sebagian pemeriksaan.
+
+Diperiksa bahwa semuanya memang dibangun pada konfigurasi ini, jadi hasilnya
+bukan false positive: `block/ioprio.o` ada di `obj-y`, `fs/proc/bootconfig.o`
+di bawah `CONFIG_BOOT_CONFIG=y` (aktif di gki_defconfig), `drivers/input/input.o`
+lewat `input-core-y`, dan sisanya berkas inti yang selalu dibangun.
