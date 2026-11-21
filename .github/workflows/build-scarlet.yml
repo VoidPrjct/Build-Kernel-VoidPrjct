@@ -111,15 +111,39 @@ jobs:
             rm -rf toolchain/neutron && mkdir -p toolchain/neutron
             tar --zstd -xf "toolchain/$NEUTRON_ASSET" -C toolchain/neutron
           fi
-          # Layout tarball tidak dijamin; cari clang yang sebenarnya, jangan asumsi bin/.
-          CLANG_BIN=$(find toolchain/neutron -type f -name clang -perm -u+x | head -1)
-          [ -n "$CLANG_BIN" ] || { echo "clang tidak ditemukan di dalam tarball"; find toolchain/neutron -maxdepth 3 | head -30; exit 1; }
+          # Layout tarball tidak dijamin, dan bin/clang biasanya SYMLINK.
+          # Run 44930630905 gagal di sini karena 'find -type f' melewati symlink,
+          # padahal bin/clang memang ada. Jadi kandidat diuji dengan benar-benar
+          # menjalankannya: itu satu-satunya bukti yang tidak bisa menyesatkan.
+          CLANG_BIN=""
+          for c in "$PWD/toolchain/neutron/bin/clang" \
+                   $(find toolchain/neutron -maxdepth 4 \( -type f -o -type l \) \
+                        -name 'clang*' 2>/dev/null | grep -E '/clang(-[0-9]+)?$' | sort -Vr); do
+            [ -e "$c" ] || continue
+            if "$c" --version >/dev/null 2>&1; then CLANG_BIN="$c"; break; fi
+          done
+          if [ -z "$CLANG_BIN" ]; then
+            echo "tidak ada clang yang bisa dijalankan di dalam tarball"
+            find toolchain/neutron -maxdepth 3 -printf '%y %p -> %l\n' | head -40
+            exit 1
+          fi
           BIN_DIR="$(cd "$(dirname "$CLANG_BIN")" && pwd)"
+          # Kernel build dengan LLVM=1 butuh tool LLVM lain di PATH yang sama.
+          # Lebih baik gagal sekarang daripada 1 jam kemudian.
+          MISSING=""
+          for t in llvm-ar llvm-nm llvm-strip llvm-objcopy llvm-objdump ld.lld; do
+            "$BIN_DIR/$t" --version >/dev/null 2>&1 || MISSING="$MISSING $t"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "toolchain tidak lengkap:$MISSING"
+            ls -l "$BIN_DIR" | head -40
+            exit 1
+          fi
           echo "NEUTRON_BIN=$BIN_DIR" >> "$GITHUB_ENV"
-          touch toolchain/neutron/.ok
           export PATH="$BIN_DIR:$PATH"
           clang --version | tee clang-version.txt
           echo "bin dir: $BIN_DIR"
+          touch toolchain/neutron/.ok
 
       - name: Siapkan konfigurasi
         env:
@@ -158,12 +182,13 @@ jobs:
           {
             echo "== make prepare =="
             mk prepare
-            echo "== drivers/kernelsu/susfs_compat.o =="
-            mk drivers/kernelsu/susfs_compat.o
-            echo "== fs/susfs.o =="
-            mk fs/susfs.o
+            # kernelsu.o adalah objek gabungan: make ini mengompilasi SEMUA
+            # berkas KernelSU-Next termasuk susfs_compat.c, sekaligus membuktikan
+            # penambahan 'kernelsu-objs += susfs_compat.o' benar-benar terbaca.
             echo "== drivers/kernelsu/kernelsu.o =="
             mk drivers/kernelsu/kernelsu.o
+            echo "== fs/susfs.o =="
+            mk fs/susfs.o
           } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           echo "kompilasi terarah OK"
 
@@ -190,6 +215,7 @@ jobs:
           ccache -s || true
 
       - name: Package AnyKernel3
+        id: package
         if: inputs.mode == 'build'
         env:
           KERNEL_DIR: ${{ github.workspace }}/kernel
@@ -198,15 +224,25 @@ jobs:
           DATE=$(date -u +%Y%m%d)
           ZIP="$PWD/VoidPrjct-Scarlet-${KVER}-${DATE}.zip"
           KERNEL_VERSION="$KVER" ./scripts/package-anykernel.sh "$KERNEL_DIR" "$ZIP"
-          echo "ZIP_PATH=$ZIP" >> "$GITHUB_ENV"
-          echo "TAG=scarlet-${KVER}-${DATE}" >> "$GITHUB_ENV"
+          # GITHUB_OUTPUT dipakai untuk langkah berikut yang membutuhkan nilai ini
+          # di ekspresi (${{ }}). Nilai dari GITHUB_ENV hanya masuk ke environment
+          # proses, bukan ke konteks ekspresi, jadi jangan diandalkan di sana.
+          {
+            echo "zip=$ZIP"
+            echo "tag=scarlet-${KVER}-${DATE}"
+            echo "kver=${KVER}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "ZIP_PATH=$ZIP"
+            echo "TAG=scarlet-${KVER}-${DATE}"
+          } >> "$GITHUB_ENV"
 
       - name: Unggah artifact (zip)
         if: inputs.mode == 'build'
         uses: actions/upload-artifact@v4
         with:
-          name: VoidPrjct-Scarlet-${{ env.KVER }}
-          path: ${{ env.ZIP_PATH }}
+          name: VoidPrjct-Scarlet-${{ steps.package.outputs.kver }}-${{ github.run_number }}
+          path: ${{ steps.package.outputs.zip }}
           if-no-files-found: error
 
       - name: Unggah log (walau gagal)
@@ -265,6 +301,17 @@ jobs:
           (tidak cocok dengan KernelSU-Next). Penggantinya kode porting di
           scripts/susfs_compat.c pada repo build.
           EOF
-          gh release create "$TAG" "$ZIP_PATH" VERSIONS.md \
-            --title "VoidPrjct-Scarlet ${KVER}" \
-            --notes-file RELEASE_NOTES.md
+          # Idempoten: tag memuat tanggal, jadi re-run pada hari yang sama akan
+          # menabrak rilis yang sudah ada. gh release create langsung gagal di
+          # situ, jadi periksa dulu.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "rilis $TAG sudah ada: perbarui aset + catatan"
+            gh release upload "$TAG" "$ZIP_PATH" --clobber
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$TAG" "$ZIP_PATH" VERSIONS.md \
+              --title "VoidPrjct-Scarlet ${KVER}" \
+              --notes-file RELEASE_NOTES.md
+          fi
+          gh release view "$TAG" --json url,tagName,assets \
+            --jq '"[release] \(.tagName) \(.url)\n[aset] " + ([.assets[].name] | join(", "))'

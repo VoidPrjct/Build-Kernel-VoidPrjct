@@ -276,3 +276,80 @@ sendiri, dibatasi paling cepat sekali per detik (fungsi itu dipanggil dari
 jalur panas), dan dipaksa sekali lagi saat perintah userspace pertama datang
 lewat `ksu_handle_sys_reboot()`. Kalau tetap gagal, SID 0 membuat semua
 pemeriksaan domain mengembalikan false — perilaku aman.
+
+---
+
+## Run 44930630905 — mode=build — GAGAL di langkah 7 (Unduh Neutron Clang)
+
+Integrasi lolos seluruhnya (KernelSU-Next, patch 50, rename 3 simbol, patch 10
+Kconfig/Makefile, susfs_compat.c, NoMount). Kernel **tidak** sampai dikompilasi.
+
+```
+neutron-clang-06092026.tar.zst
+clang tidak ditemukan di dalam tarball
+toolchain/neutron
+toolchain/neutron/bin
+toolchain/neutron/bin/clang        <-- ada, tapi ...
+```
+
+Penyebab: `bin/clang` di tarball Neutron adalah **symlink**, dan pencarian memakai
+`find -type f`, yang menurut definisinya melewatkan symlink. Jadi clang-nya ada,
+tapi tidak pernah ditemukan. Tidak ada kaitan dengan nama asset atau tag.
+
+Perbaikan: kandidat tidak lagi disaring berdasarkan tipe berkas, melainkan
+**diuji dengan menjalankannya** (`"$c" --version`). Ini juga menangani kasus
+symlink rusak (mis. menunjuk path absolut mesin pembuat tarball): kandidat
+berikutnya yang dicoba, dan `clang-24` yang berupa berkas nyata akan terpilih.
+Diuji lokal pada dua layout tiruan: symlink sehat dan symlink rusak — keduanya
+menghasilkan `BIN_DIR` yang benar.
+
+Ditambahkan juga pemeriksaan kelengkapan `llvm-ar`, `llvm-nm`, `llvm-strip`,
+`llvm-objcopy`, `llvm-objdump`, `ld.lld` dengan cara yang sama (dijalankan).
+Kalau ada yang hilang, langkah ini berhenti sebelum build, bukan setelahnya.
+
+### Perbaikan lain pada workflow di commit ini
+
+- **`env.KVER` pada `with:` tidak bisa dipakai.** Nilai dari `GITHUB_ENV` masuk
+  ke environment proses, bukan ke konteks ekspresi `${{ }}`. Nama artifact dan
+  `path:` karena itu memakai `steps.package.outputs.*` (dari `GITHUB_OUTPUT`),
+  yang selalu terbaca.
+- **Rilis kini idempoten.** Tag memuat tanggal, jadi re-run pada hari yang sama
+  menabrak rilis yang sudah ada dan `gh release create` langsung gagal. Sekarang
+  diperiksa dulu: kalau ada, aset di-upload ulang dengan `--clobber` dan catatan
+  diperbarui.
+- **Kompilasi terarah diperbaiki.** Target `drivers/kernelsu/susfs_compat.o`
+  dihapus: itu objek anggota dari gabungan `kernelsu-objs`, sedangkan
+  `drivers/kernelsu/kernelsu.o` sudah mengompilasi **semua** berkas KernelSU-Next
+  termasuk `susfs_compat.c` — sekaligus membuktikan baris
+  `kernelsu-objs += susfs_compat.o` benar-benar terbaca.
+
+### Audit tanda tangan: deklarasi `extern` multi-baris di patch 50
+
+Pemeriksaan otomatis sebelumnya hanya membaca deklarasi satu baris, sehingga
+justru melewatkan yang paling berisiko. Setelah diperbaiki, kelima deklarasi
+`extern` panjang (execveat, execveat_sucompat, post_execveat_sucompat,
+preinit_handle_post_execveat, handle_faccessat) dicocokkan parameter demi
+parameter dengan definisi di `susfs_compat.c`: **semua sama persis**, termasuk
+`int*` pada argumen dan urutan `void*`/`int*`.
+
+### Audit `fs/susfs.c`: seluruh extern punya penyedia
+
+Ini yang paling menentukan apakah kernel bisa di-link sama sekali. Tujuh `extern`
+di `fs/susfs.c` dan penyedianya:
+
+| Simbol | Penyedia | Bukti |
+|---|---|---|
+| `susfs_is_current_ksu_domain` | `susfs_compat.c` | patch 50 mendeklarasikannya 5x sebagai `bool(void)` |
+| `setup_selinux` | KernelSU-Next | `kernel/selinux/selinux.c:129`, global, bukan `static` |
+| `ksu_cred` | KernelSU-Next | `kernel/core/init.c:77` |
+| `susfs_get_non_sus_mnt_id_from_mnt` | patch 50 | didefinisikan di `50.patch` L943 |
+| `susfs_get_non_sus_vfsmnt_from_vfsmnt` | patch 50 | didefinisikan di `50.patch` L958 |
+| `calculate_f_flags_wrapper` | patch 50 | L2297 |
+| `statfs_by_dentry_wrapper` | patch 50 | L2293 |
+
+Perhatikan `setup_selinux` dan `ksu_cred`: awalnya tampak seperti milik KernelSU
+resmi yang tidak ada di KernelSU-Next, tetapi keduanya ternyata ada di sana
+dengan nama sama. Kalau salah satu saja tidak ada, `fs/susfs.c` gagal di-link.
+
+`fs/susfs.c` juga memanggil `setup_selinux("u:r:ksu:s0", cred)` — nama konteks
+yang sama dengan `KERNEL_SU_CONTEXT` di KernelSU-Next, bukan `u:r:su:s0`.
