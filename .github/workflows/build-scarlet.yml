@@ -187,8 +187,8 @@ jobs:
           cd kernel
           git config user.name "VoidPrjct build bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # KernelSU/ dan NoMount/ adalah clone terpisah; jangan ikut di-commit.
-          printf 'KernelSU/\nNoMount/\nout/\n' >> .git/info/exclude
+          # KernelSU-Next/ dan NoMount/ adalah clone terpisah; jangan ikut di-commit.
+          printf 'KernelSU-Next/\nNoMount/\nout/\n' >> .git/info/exclude
           git checkout -B scarlet/android12-5.10
           git add -A
           if git diff --cached --quiet; then

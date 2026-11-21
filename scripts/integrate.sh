@@ -47,8 +47,12 @@ curl -fsSL "$KSU_SETUP_URL" -o "$WORKDIR/ksu-setup.sh" \
 # SHA diverifikasi ulang setelahnya.
 sh "$WORKDIR/ksu-setup.sh" "$KSU_SHA" || die "setup.sh KernelSU-Next gagal"
 
-[ -d KernelSU ] || die "folder KernelSU tidak terbentuk"
-GOT_KSU=$(git -C KernelSU rev-parse HEAD)
+# setup.sh menaruh hasil clone di $GKI_ROOT/$REPO, dan REPO="$OWNER" = KernelSU-Next.
+# (Diuji di run 44928994659: folder-nya memang KernelSU-Next, bukan KernelSU.)
+KSU_DIR="$KERNEL_DIR/KernelSU-Next"
+
+[ -d "$KSU_DIR" ] || die "folder KernelSU-Next tidak terbentuk di $KSU_DIR"
+GOT_KSU=$(git -C "$KSU_DIR" rev-parse HEAD)
 if [ "$GOT_KSU" != "$KSU_SHA" ]; then
     die "KernelSU-Next salah checkout: dapat $GOT_KSU, harusnya $KSU_SHA (setup.sh kemungkinan fallback ke branch default)"
 fi
@@ -110,17 +114,17 @@ P10="$SUSFS_P/10.patch"
 #   kernel/Kconfig  -> menambahkan CONFIG_KSU_SUSFS_*
 #   kernel/Makefile -> hanya mencetak SUSFS_VERSION saat build
 # Sisanya (32 file) tidak dipakai; penggantinya ada di scripts/susfs_compat.c
-( cd KernelSU && git apply --include='kernel/Kconfig' --include='kernel/Makefile' "$P10" ) \
+( cd "$KSU_DIR" && git apply --include='kernel/Kconfig' --include='kernel/Makefile' "$P10" ) \
     || die "hunk Kconfig/Makefile patch 10 gagal (struktur KernelSU-Next berubah?)"
-log "CONFIG_KSU_SUSFS_* ditambahkan ke KernelSU/kernel/Kconfig"
+log "CONFIG_KSU_SUSFS_* ditambahkan ke KernelSU-Next/kernel/Kconfig"
 
-grep -q 'config KSU_SUSFS$' KernelSU/kernel/Kconfig \
+grep -q 'config KSU_SUSFS$' "$KSU_DIR/kernel/Kconfig" \
     || die "CONFIG_KSU_SUSFS tidak masuk ke Kconfig"
 
 log "pasang susfs_compat.c (pengganti bagian sisi KernelSU)"
-cp -f "$SCRIPTS_DIR/susfs_compat.c" KernelSU/kernel/susfs_compat.c
-if ! grep -q 'susfs_compat\.o' KernelSU/kernel/Kbuild; then
-    printf 'kernelsu-objs += susfs_compat.o\n' >> KernelSU/kernel/Kbuild
+cp -f "$SCRIPTS_DIR/susfs_compat.c" "$KSU_DIR/kernel/susfs_compat.c"
+if ! grep -q 'susfs_compat\.o' "$KSU_DIR/kernel/Kbuild"; then
+    printf 'kernelsu-objs += susfs_compat.o\n' >> "$KSU_DIR/kernel/Kbuild"
 fi
 log "susfs_compat.c terpasang"
 
