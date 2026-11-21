@@ -353,3 +353,46 @@ dengan nama sama. Kalau salah satu saja tidak ada, `fs/susfs.c` gagal di-link.
 
 `fs/susfs.c` juga memanggil `setup_selinux("u:r:ksu:s0", cred)` — nama konteks
 yang sama dengan `KERNEL_SU_CONTEXT` di KernelSU-Next, bukan `u:r:su:s0`.
+
+---
+
+## Run 44930988701 — dispatch DITOLAK (422) sebelum job berjalan
+
+Saat mencoba dispatch `mode=check`, GitHub menolak:
+
+```
+Invalid Argument - failed to parse workflow: (Line: 222, Col: 14): An expression was expected
+```
+
+Penyebabnya bukan YAML dan bukan skrip: di dalam **komentar shell** pada langkah
+packaging saya menulis ekspresi kosong (`${{ }}`) sebagai contoh. GitHub
+mem-parsing seluruh isi berkas workflow sebagai templat, termasuk teks di dalam
+komentar, sehingga tanda itu harus dianggap ekspresi dan gagal.
+
+Pelajaran yang langsung diterapkan: sebelum push, workflow diperiksa untuk
+(a) ekspresi kosong dan (b) `${{` tanpa `}}` pada baris yang sama. Pemeriksaan
+itu sekarang bersih.
+
+## Verifikasi konfigurasi ThinLTO ↔ CFI
+
+Baseline GKI ternyata memakai `CONFIG_LTO_CLANG_FULL=y` + `CONFIG_CFI_CLANG=y`.
+Fragment menggantinya ke ThinLTO, jadi pertanyaannya: apakah CFI ikut mati?
+
+Diperiksa di `arch/Kconfig` fork ini:
+
+- `CFI_CLANG` hanya `depends on LTO_CLANG && KALLSYMS`
+- `LTO_CLANG` di-`select` oleh `LTO_CLANG_FULL` **maupun** `LTO_CLANG_THIN`
+- `KALLSYMS` punya `default y` di 5.10
+- `ARCH_SUPPORTS_LTO_CLANG_THIN` di-`select` arm64
+
+Jadi ThinLTO + CFI sah berdampingan di pohon ini, dan CFI tidak akan dibuang
+`olddefconfig`. Meskipun begitu, `CONFIG_CFI_CLANG` sekarang masuk daftar yang
+diwajibkan `verify-config.sh`, supaya penyimpangan dari GKI tidak terjadi
+diam-diam.
+
+## Ruang nama TIF untuk penanda proses
+
+`susfs_def.h` memakai bit TIF 33, 34, 35. Diperiksa pada
+`arch/arm64/include/asm/thread_info.h` fork ini: bit tertinggi yang dipakai
+adalah **26** (`TIF_TAGGED_ADDR`), jadi 33–35 bebas. KernelSU-Next memakai bit
+63 (`TIF_KSU_DISABLE_ESCAPE_WITH_ROOT`), juga tidak bertabrakan.

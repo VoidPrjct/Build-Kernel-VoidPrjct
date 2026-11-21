@@ -26,6 +26,11 @@ WANT_Y=(
   CONFIG_LTO_CLANG
   CONFIG_LTO_CLANG_THIN
   CONFIG_MODVERSIONS
+  # Baseline GKI memakai CFI. ThinLTO tidak mematikannya (di 5.10 fork ini
+  # CFI_CLANG hanya butuh LTO_CLANG + KALLSYMS; keduanya tetap terpenuhi), tapi
+  # kalau suatu saat olddefconfig membuangnya, kernelnya jadi menyimpang dari
+  # GKI tanpa pesan apa pun. Karena itu diperiksa.
+  CONFIG_CFI_CLANG
 )
 WANT_NOTSET=(
   CONFIG_LTO_CLANG_FULL
