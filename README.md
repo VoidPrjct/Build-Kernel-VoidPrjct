@@ -2,6 +2,7 @@
 
 Repo build untuk kernel GKI `android12-5.10` (Linux 5.10.272)
 
+```
                AAA               KKKKKKKKK    KKKKKKKUUUUUUUU     UUUUUUUU                           AAA               IIIIIIIIII               SSSSSSSSSSSSSSS LLLLLLLLLLL                  OOOOOOOOO     PPPPPPPPPPPPPPPPP
               A:::A              K:::::::K    K:::::KU::::::U     U::::::U                          A:::A              I::::::::I             SS:::::::::::::::SL:::::::::L                OO:::::::::OO   P::::::::::::::::P
              A:::::A             K:::::::K    K:::::KU::::::U     U::::::U                         A:::::A             I::::::::I            S:::::SSSSSS::::::SL:::::::::L              OO:::::::::::::OO P::::::PPPPPP:::::P
@@ -18,3 +19,4 @@ Repo build untuk kernel GKI `android12-5.10` (Linux 5.10.272)
   A:::::A               A:::::A  K:::::::K    K:::::K  UU:::::::::::::UU                A:::::A               A:::::A  I::::::::I            S::::::SSSSSS:::::SL::::::::::::::::::::::L OO:::::::::::::OO P::::::::P
  A:::::A                 A:::::A K:::::::K    K:::::K    UU:::::::::UU                 A:::::A                 A:::::A I::::::::I            S:::::::::::::::SS L::::::::::::::::::::::L   OO:::::::::OO   P::::::::P
 AAAAAAA                   AAAAAAAKKKKKKKKK    KKKKKKK      UUUUUUUUU                  AAAAAAA                   AAAAAAAIIIIIIIIII             SSSSSSSSSSSSSSS   LLLLLLLLLLLLLLLLLLLLLLLL     OOOOOOOOO     PPPPPPPPPP
+```
