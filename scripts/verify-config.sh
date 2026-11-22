@@ -36,12 +36,28 @@ WANT_Y=(
   # kalau suatu saat olddefconfig membuangnya, kernelnya jadi menyimpang dari
   # GKI tanpa pesan apa pun. Karena itu diperiksa.
   CONFIG_CFI_CLANG
+  # Scarlet gaming: governor CPU + devfreq scarlet wajib built-in.
+  CONFIG_CPU_FREQ_GOV_SCARLET
+  CONFIG_CPU_FREQ_DEFAULT_GOV_SCARLET
+  CONFIG_DEVFREQ_GOV_SCARLET
 )
 WANT_NOTSET=(
   CONFIG_LTO_CLANG_FULL
   CONFIG_LTO_NONE
   # Kalau aktif, "-g<hash>" ditempel setelah CONFIG_LOCALVERSION.
   CONFIG_LOCALVERSION_AUTO
+  # Scarlet gaming: semua governor CPU/devfreq lain harus mati.
+  CONFIG_CPU_FREQ_GOV_PERFORMANCE
+  CONFIG_CPU_FREQ_GOV_POWERSAVE
+  CONFIG_CPU_FREQ_GOV_USERSPACE
+  CONFIG_CPU_FREQ_GOV_ONDEMAND
+  CONFIG_CPU_FREQ_GOV_CONSERVATIVE
+  CONFIG_CPU_FREQ_GOV_SCHEDHORIZON
+  CONFIG_DEVFREQ_GOV_PERFORMANCE
+  CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND
+  CONFIG_DEVFREQ_GOV_POWERSAVE
+  CONFIG_DEVFREQ_GOV_USERSPACE
+  CONFIG_DEVFREQ_GOV_PASSIVE
 )
 # Nama kernel: uname -r = <versi>-VoidPrjct-Scarlet.
 WANT_LOCALVERSION="-VoidPrjct-Scarlet"
