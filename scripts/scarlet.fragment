@@ -53,6 +53,7 @@ CONFIG_CPU_FREQ_DEFAULT_GOV_SCARLET=y
 # CONFIG_CPU_FREQ_GOV_ONDEMAND is not set
 # CONFIG_CPU_FREQ_GOV_CONSERVATIVE is not set
 # CONFIG_CPU_FREQ_GOV_SCHEDHORIZON is not set
+# CONFIG_CPU_FREQ_GOV_REFLEX is not set
 
 ## Scarlet gaming — governor devfreq (GPU dll.): scarlet + simple_ondemand.
 ## simple_ondemand TIDAK bisa dimatikan: drivers/scsi/ufs/Kconfig mem-select-nya
