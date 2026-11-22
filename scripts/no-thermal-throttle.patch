@@ -1,28 +1,28 @@
 diff -ruN a/drivers/thermal/cpufreq_cooling.c b/drivers/thermal/cpufreq_cooling.c
---- a/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:12:19.934503399 +0000
-+++ b/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:12:20.286503399 +0000
-@@ -480,6 +480,10 @@
- 			struct cpufreq_policy *policy,
- 			struct em_perf_domain *em)
- {
+--- a/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:31:22.987633134 +0000
++++ b/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:31:24.127633134 +0000
+@@ -488,6 +488,10 @@
+ 	int ret;
+ 	struct thermal_cooling_device_ops *cooling_ops;
+ 
 +	/* VoidPrjct-Scarlet: no CPU thermal throttling. Critical trips
 +	 * (auto-shutdown) tetap aktif di framework thermal. */
 +	return ERR_PTR(-ENOSYS);
 +
- 	struct thermal_cooling_device *cdev;
- 	struct cpufreq_cooling_device *cpufreq_cdev;
- 	char dev_name[THERMAL_NAME_LENGTH];
+ 	dev = get_cpu_device(policy->cpu);
+ 	if (unlikely(!dev)) {
+ 		pr_warn("No cpu device for cpu %d\n", policy->cpu);
 diff -ruN a/drivers/thermal/devfreq_cooling.c b/drivers/thermal/devfreq_cooling.c
---- a/drivers/thermal/devfreq_cooling.c	2026-11-22 21:12:20.162503399 +0000
-+++ b/drivers/thermal/devfreq_cooling.c	2026-11-22 21:12:20.290503399 +0000
-@@ -460,6 +460,10 @@
- of_devfreq_cooling_register_power(struct device_node *np, struct devfreq *df,
- 				  struct devfreq_cooling_power *dfc_power)
- {
+--- a/drivers/thermal/devfreq_cooling.c	2026-11-22 21:31:24.043633134 +0000
++++ b/drivers/thermal/devfreq_cooling.c	2026-11-22 21:31:24.131633134 +0000
+@@ -465,6 +465,10 @@
+ 	char dev_name[THERMAL_NAME_LENGTH];
+ 	int err;
+ 
 +	/* VoidPrjct-Scarlet: no GPU thermal throttling. Critical trips
 +	 * (auto-shutdown) tetap aktif di framework thermal. */
 +	return ERR_PTR(-ENOSYS);
 +
- 	struct thermal_cooling_device *cdev;
- 	struct devfreq_cooling_device *dfc;
- 	char dev_name[THERMAL_NAME_LENGTH];
+ 	dfc = kzalloc(sizeof(*dfc), GFP_KERNEL);
+ 	if (!dfc)
+ 		return ERR_PTR(-ENOMEM);
