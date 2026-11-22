@@ -1,0 +1,17 @@
+diff -ruN a/drivers/thermal/thermal_core.c b/drivers/thermal/thermal_core.c
+--- a/drivers/thermal/thermal_core.c	2026-11-22 21:15:14.077472947 +0000
++++ b/drivers/thermal/thermal_core.c	2026-11-22 21:15:14.149472947 +0000
+@@ -398,9 +398,12 @@
+ 		tz->ops->notify(tz, trip, trip_type);
+ 
+ 	if (trip_type == THERMAL_TRIP_CRITICAL) {
++		/* VoidPrjct-Scarlet: no auto-shutdown on critical trip.
++		 * Log warning only; zones stay alive. */
+ 		dev_emerg(&tz->device,
+-			  "critical temperature reached (%d C), shutting down\n",
++			  "critical temperature reached (%d C), shutdown disabled (Scarlet)\n",
+ 			  tz->temperature / 1000);
++		return;
+ 		mutex_lock(&poweroff_lock);
+ 		if (!power_off_triggered) {
+ 			/*
