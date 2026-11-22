@@ -1,27 +1,29 @@
 diff -ruN a/drivers/thermal/cpufreq_cooling.c b/drivers/thermal/cpufreq_cooling.c
---- a/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:31:22.987633134 +0000
-+++ b/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:31:24.127633134 +0000
-@@ -488,6 +488,10 @@
+--- a/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:54:54.224000008 +0000
++++ b/drivers/thermal/cpufreq_cooling.c	2026-11-22 21:54:54.940000008 +0000
+@@ -488,6 +488,11 @@
  	int ret;
  	struct thermal_cooling_device_ops *cooling_ops;
  
-+	/* VoidPrjct-Scarlet: no CPU thermal throttling. Critical trips
-+	 * (auto-shutdown) tetap aktif di framework thermal. */
-+	return ERR_PTR(-ENOSYS);
++	/* VoidPrjct-Scarlet: no CPU thermal throttling. Return NULL (not an
++	 * error) so callers treat it as "no cooling device" and keep going;
++	 * ERR_PTR here breaks vendor devfreq init paths. */
++	return NULL;
 +
  	dev = get_cpu_device(policy->cpu);
  	if (unlikely(!dev)) {
  		pr_warn("No cpu device for cpu %d\n", policy->cpu);
 diff -ruN a/drivers/thermal/devfreq_cooling.c b/drivers/thermal/devfreq_cooling.c
---- a/drivers/thermal/devfreq_cooling.c	2026-11-22 21:31:24.043633134 +0000
-+++ b/drivers/thermal/devfreq_cooling.c	2026-11-22 21:31:24.131633134 +0000
-@@ -465,6 +465,10 @@
+--- a/drivers/thermal/devfreq_cooling.c	2026-11-22 21:54:54.832000008 +0000
++++ b/drivers/thermal/devfreq_cooling.c	2026-11-22 21:54:54.944000008 +0000
+@@ -465,6 +465,11 @@
  	char dev_name[THERMAL_NAME_LENGTH];
  	int err;
  
-+	/* VoidPrjct-Scarlet: no GPU thermal throttling. Critical trips
-+	 * (auto-shutdown) tetap aktif di framework thermal. */
-+	return ERR_PTR(-ENOSYS);
++	/* VoidPrjct-Scarlet: no GPU thermal throttling. Return NULL (not an
++	 * error) so vendor drivers (Mali/MTK) keep their devfreq device
++	 * alive instead of aborting init; ERR_PTR broke gpufreq probing. */
++	return NULL;
 +
  	dfc = kzalloc(sizeof(*dfc), GFP_KERNEL);
  	if (!dfc)
