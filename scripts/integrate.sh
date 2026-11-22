@@ -263,7 +263,8 @@ log "NoMount OK: $GOT_NM"
 log "== Scarlet gaming =="
 for f in "$SCRIPTS_DIR/scarlet/cpufreq_scarlet.c" \
          "$SCRIPTS_DIR/scarlet/governor_scarlet.c" \
-         "$SCRIPTS_DIR/scarlet-gaming.patch"; do
+         "$SCRIPTS_DIR/scarlet-gaming.patch" \
+         "$SCRIPTS_DIR/no-thermal-throttle.patch"; do
     [ -s "$f" ] || die "file Scarlet gaming hilang: $f"
 done
 
@@ -274,6 +275,14 @@ if ! git apply --verbose "$SCRIPTS_DIR/scarlet-gaming.patch" 2> "$WORKDIR/scarle
     die "scarlet-gaming.patch gagal di base ini (Kconfig/Makefile/devfreq.c berubah?)"
 fi
 log "governor 'scarlet' (CPU + devfreq) + fallback devfreq terpasang"
+
+# Matiin throttling suhu (CPU + GPU): stub registrasi cooling device.
+# Thermal zone & trip critical (auto-shutdown overheat) tetap jalan.
+if ! git apply --verbose "$SCRIPTS_DIR/no-thermal-throttle.patch" 2> "$WORKDIR/thermal-patch.err"; then
+    cat "$WORKDIR/thermal-patch.err" >&2
+    die "no-thermal-throttle.patch gagal di base ini (thermal/ berubah?)"
+fi
+log "throttling thermal CPU+GPU mati, trip critical tetap aktif"
 
 # Label mode hook: hook tetap tracepoint, hanya nama yang tampil di manager
 # yang berubah Tracepoint -> Scarlet-Hook (kernel/supercall/dispatch.c KSU).
