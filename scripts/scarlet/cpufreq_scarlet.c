@@ -20,8 +20,8 @@ static void cpufreq_gov_scarlet_limits(struct cpufreq_policy *policy)
 	unsigned int max = policy->cpuinfo.max_freq;
 
 	pr_debug("locking to %u kHz (scarlet)\n", max);
-	policy->min = policy->user_policy.min = max;
-	policy->max = policy->user_policy.max = max;
+	policy->min = max;
+	policy->max = max;
 	__cpufreq_driver_target(policy, max, CPUFREQ_RELATION_H);
 }
 
