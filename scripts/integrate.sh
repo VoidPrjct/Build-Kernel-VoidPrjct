@@ -258,7 +258,36 @@ fi
 log "NoMount OK: $GOT_NM"
 
 # ---------------------------------------------------------------------------
-# 5. Ringkasan hasil
+# 5. Scarlet gaming: governor CPU/devfreq "scarlet" + label mode hook
+# ---------------------------------------------------------------------------
+log "== Scarlet gaming =="
+for f in "$SCRIPTS_DIR/scarlet/cpufreq_scarlet.c" \
+         "$SCRIPTS_DIR/scarlet/governor_scarlet.c" \
+         "$SCRIPTS_DIR/scarlet-gaming.patch"; do
+    [ -s "$f" ] || die "file Scarlet gaming hilang: $f"
+done
+
+cp -f "$SCRIPTS_DIR/scarlet/cpufreq_scarlet.c" drivers/cpufreq/cpufreq_scarlet.c
+cp -f "$SCRIPTS_DIR/scarlet/governor_scarlet.c" drivers/devfreq/governor_scarlet.c
+if ! git apply --verbose "$SCRIPTS_DIR/scarlet-gaming.patch" 2> "$WORKDIR/scarlet-patch.err"; then
+    cat "$WORKDIR/scarlet-patch.err" >&2
+    die "scarlet-gaming.patch gagal di base ini (Kconfig/Makefile/devfreq.c berubah?)"
+fi
+log "governor 'scarlet' (CPU + devfreq) + fallback devfreq terpasang"
+
+# Label mode hook: hook tetap tracepoint, hanya nama yang tampil di manager
+# yang berubah Tracepoint -> Scarlet-Hook (kernel/supercall/dispatch.c KSU).
+DISPATCH="$KSU_DIR/kernel/supercall/dispatch.c"
+[ -f "$DISPATCH" ] || die "dispatch.c tidak ada di $KSU_DIR/kernel/supercall"
+grep -qF 'strscpy(cmd.mode, "Tracepoint", sizeof(cmd.mode));' "$DISPATCH" \
+    || die 'pola "Tracepoint" tidak ditemukan di dispatch.c (kode KSU berubah?)'
+sed -i 's|strscpy(cmd\.mode, "Tracepoint", sizeof(cmd\.mode));|strscpy(cmd.mode, "Scarlet-Hook", sizeof(cmd.mode));|' "$DISPATCH"
+grep -qF '"Scarlet-Hook"' "$DISPATCH" || die "label Scarlet-Hook gagal dipasang"
+grep -qF '"Tracepoint"' "$DISPATCH" && die "masih ada label Tracepoint"
+log "mode hook tampil sebagai Scarlet-Hook (hook tetap Tracepoint)"
+
+# ---------------------------------------------------------------------------
+# 6. Ringkasan hasil
 # ---------------------------------------------------------------------------
 log "== ringkasan =="
 log "KernelSU-Next : $GOT_KSU"
