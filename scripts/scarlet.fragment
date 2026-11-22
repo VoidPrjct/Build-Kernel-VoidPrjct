@@ -54,13 +54,15 @@ CONFIG_CPU_FREQ_DEFAULT_GOV_SCARLET=y
 # CONFIG_CPU_FREQ_GOV_CONSERVATIVE is not set
 # CONFIG_CPU_FREQ_GOV_SCHEDHORIZON is not set
 
-## Scarlet gaming — governor devfreq (GPU dll.): hanya scarlet.
-## Governor yang diminta vendor tapi tidak ada di kernel akan di-fallback
+## Scarlet gaming — governor devfreq (GPU dll.): scarlet + simple_ondemand.
+## simple_ondemand TIDAK bisa dimatikan: drivers/scsi/ufs/Kconfig mem-select-nya
+## untuk scaling frekuensi storage UFS (select tidak bisa dioverride fragment).
+## Governor lain yang diminta vendor tapi tidak ada di kernel akan di-fallback
 ## ke "scarlet" oleh drivers/devfreq/devfreq.c (patch scarlet-gaming),
-## jadi perangkat tidak pernah kehilangan governor, freq selalu terkunci max.
+## jadi perangkat GPU tidak pernah kehilangan governor, freq terkunci max.
 CONFIG_DEVFREQ_GOV_SCARLET=y
+CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND=y
 # CONFIG_DEVFREQ_GOV_PERFORMANCE is not set
-# CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND is not set
 # CONFIG_DEVFREQ_GOV_POWERSAVE is not set
 # CONFIG_DEVFREQ_GOV_USERSPACE is not set
 # CONFIG_DEVFREQ_GOV_PASSIVE is not set
