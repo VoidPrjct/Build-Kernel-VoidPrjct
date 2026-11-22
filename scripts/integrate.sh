@@ -264,7 +264,8 @@ log "== Scarlet gaming =="
 for f in "$SCRIPTS_DIR/scarlet/cpufreq_scarlet.c" \
          "$SCRIPTS_DIR/scarlet/governor_scarlet.c" \
          "$SCRIPTS_DIR/scarlet-gaming.patch" \
-         "$SCRIPTS_DIR/no-thermal-throttle.patch"; do
+         "$SCRIPTS_DIR/no-thermal-throttle.patch" \
+         "$SCRIPTS_DIR/no-critical-shutdown.patch"; do
     [ -s "$f" ] || die "file Scarlet gaming hilang: $f"
 done
 
@@ -283,6 +284,13 @@ if ! git apply --verbose "$SCRIPTS_DIR/no-thermal-throttle.patch" 2> "$WORKDIR/t
     die "no-thermal-throttle.patch gagal di base ini (thermal/ berubah?)"
 fi
 log "throttling thermal CPU+GPU mati, trip critical tetap aktif"
+
+# Trip critical: log warning saja, TIDAK shutdown. Suhu tetap terpantau.
+if ! git apply --verbose "$SCRIPTS_DIR/no-critical-shutdown.patch" 2> "$WORKDIR/critical-patch.err"; then
+    cat "$WORKDIR/critical-patch.err" >&2
+    die "no-critical-shutdown.patch gagal di base ini (thermal_core.c berubah?)"
+fi
+log "critical shutdown mati (warning saja), thermal zone tetap hidup"
 
 # Label mode hook: hook tetap tracepoint, hanya nama yang tampil di manager
 # yang berubah Tracepoint -> Scarlet-Hook (kernel/supercall/dispatch.c KSU).
