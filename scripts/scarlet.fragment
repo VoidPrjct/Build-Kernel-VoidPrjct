@@ -41,3 +41,27 @@ CONFIG_MODVERSIONS=y
 ## modul melewati bagian rilis saat membandingkan vermagic.
 CONFIG_LOCALVERSION="-VoidPrjct-Scarlet"
 # CONFIG_LOCALVERSION_AUTO is not set
+
+## Scarlet gaming — governor CPU: hanya schedutil + scarlet (scarlet default).
+## Governor lain dimatikan; performance tetap tersedia sebagai fallback core
+## tapi tidak dipasang di scaling_available_governors.
+CONFIG_CPU_FREQ_GOV_SCARLET=y
+CONFIG_CPU_FREQ_DEFAULT_GOV_SCARLET=y
+# CONFIG_CPU_FREQ_GOV_PERFORMANCE is not set
+# CONFIG_CPU_FREQ_GOV_POWERSAVE is not set
+# CONFIG_CPU_FREQ_GOV_USERSPACE is not set
+# CONFIG_CPU_FREQ_GOV_ONDEMAND is not set
+# CONFIG_CPU_FREQ_GOV_CONSERVATIVE is not set
+# CONFIG_CPU_FREQ_GOV_SCHEDHORIZON is not set
+
+## Scarlet gaming — governor devfreq (GPU dll.): hanya scarlet.
+## Governor yang diminta vendor tapi tidak ada di kernel akan di-fallback
+## ke "scarlet" oleh drivers/devfreq/devfreq.c (patch scarlet-gaming),
+## jadi perangkat tidak pernah kehilangan governor, freq selalu terkunci max.
+CONFIG_DEVFREQ_GOV_SCARLET=y
+# CONFIG_DEVFREQ_GOV_PERFORMANCE is not set
+# CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND is not set
+# CONFIG_DEVFREQ_GOV_POWERSAVE is not set
+# CONFIG_DEVFREQ_GOV_USERSPACE is not set
+# CONFIG_DEVFREQ_GOV_PASSIVE is not set
+
