@@ -135,6 +135,26 @@ grep -qE '\bksu_handle_execveat_sucompat\b' "$SUSFS_P/50.patch" \
     && die "masih ada ksu_handle_execveat_sucompat (bentrok tanda tangan)"
 log "3 simbol di-rename agar tidak menabrak tanda tangan KernelSU-Next"
 
+# --- Sesuaikan patch 50 dengan fs/namespace.c hasil 5.10.273 ---------------
+# Stable 273 ("namespace: don't inherit MNT_UMOUNT in clone_mnt()") menambah
+# |MNT_UMOUNT pada baris ini, jadi baris konteks di patch 50 harus ikut
+# diperbarui; kalau tidak, hunk clone_mnt tidak bisa di-apply.
+python3 - "$SUSFS_P/50.patch" <<'PYEOF' >&2 || die "penyesuaian konteks clone_mnt di patch 50 gagal"
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = " mnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL);\n"
+new = " mnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL|MNT_UMOUNT);\n"
+n = s.count(old)
+if n == 1:
+    open(p, "w").write(s.replace(old, new))
+    print("[integrate] konteks clone_mnt patch 50 disesuaikan ke 5.10.273 (+MNT_UMOUNT)")
+elif s.count(new) == 1:
+    print("[integrate] konteks clone_mnt patch 50 sudah versi baru")
+else:
+    sys.exit("baris konteks clone_mnt tidak unik di patch 50 (count=%d)" % n)
+PYEOF
+
 # --- Buka tiga simbol selinux_hide.c yang dibutuhkan patch 50 ---------------
 # patch 50 (security/selinux/selinuxfs.c) mendeklarasikan:
 #   extern struct page *fake_status;
@@ -175,8 +195,21 @@ log "3 simbol selinux_hide dibuka untuk patch 50 (fake_status*)"
 
 if ! git apply --verbose "$SUSFS_P/50.patch" 2> "$WORKDIR/patch50.err"; then
     cat "$WORKDIR/patch50.err" >&2
-    find fs security kernel mm block drivers -name '*.rej' 2>/dev/null | head -40 >&2
-    die "patch 50 gagal (lihat log). Ini tidak diharapkan: pada uji lokal patch ini pas 27/27 file."
+    warn "git apply gagal; coba git apply -3 (blob preimage biasanya ada di riwayat merge)"
+    if git apply -3 "$SUSFS_P/50.patch" 2>> "$WORKDIR/patch50.err"; then
+        log "patch 50 OK (git apply -3)"
+    else
+        warn "git apply -3 gagal; coba patch(1) dengan fuzz"
+        # git apply atomik: tidak menyisakan hasil parsial. patch(1) hunk-per-hunk.
+        if ! patch -p1 --batch --fuzz=10 -i "$SUSFS_P/50.patch" 2>> "$WORKDIR/patch50.err"; then
+            cat "$WORKDIR/patch50.err" >&2
+            find fs security kernel mm block drivers include -name '*.rej' 2>/dev/null | head -40 >&2
+            die "patch 50 gagal di semua metode (git apply, git apply -3, patch --fuzz)"
+        fi
+        REJ=$(find fs security kernel mm block drivers include -name '*.rej' 2>/dev/null | head -40)
+        [ -z "$REJ" ] || { echo "$REJ" >&2; die "ada .rej setelah patch 50 via patch(1)"; }
+        log "patch 50 OK (patch --fuzz)"
+    fi
 fi
 log "patch 50 OK"
 
