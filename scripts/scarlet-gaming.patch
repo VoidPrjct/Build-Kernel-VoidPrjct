@@ -1,0 +1,104 @@
+scarlet-gaming.patch — mod gaming VoidPrjct-Scarlet pada base 98ab0310 (5.10.274).
+Diterapkan oleh scripts/integrate.sh di runner GitHub Actions:
+- governor "scarlet" untuk cpufreq (Kconfig + Makefile + pilihan default)
+- governor "scarlet" untuk devfreq (Kconfig + Makefile)
+- devfreq core: fallback ke "scarlet" kalau governor yang diminta vendor tidak ada
+--- a/drivers/cpufreq/Kconfig	2026-11-22 19:53:53.536000050 +0000
++++ b/drivers/cpufreq/Kconfig	2026-11-22 19:53:56.912000050 +0000
+@@ -122,8 +122,22 @@
+ 	  have a look at the help section of that governor. The fallback
+ 	  governor will be 'performance'.
+ 
++config CPU_FREQ_DEFAULT_GOV_SCARLET
++	bool "scarlet"
++	select CPU_FREQ_GOV_SCARLET
++	help
++	  Use the 'scarlet' governor as default. VoidPrjct-Scarlet gaming:
++	  CPU frequency is locked statically to the maximum supported value.
++
+ endchoice
+ 
++config CPU_FREQ_GOV_SCARLET
++	tristate "'scarlet' governor (VoidPrjct gaming, lock max freq)"
++	help
++	  This governor locks the CPU frequency statically to the highest
++	  available value. It is the VoidPrjct-Scarlet gaming governor; the
++	  CPU never scales below cpuinfo.max_freq while it is active.
++
+ config CPU_FREQ_GOV_PERFORMANCE
+ 	tristate "'performance' governor"
+ 	help
+diff -ruN a/drivers/cpufreq/Makefile b/drivers/cpufreq/Makefile
+--- a/drivers/cpufreq/Makefile	2026-11-22 19:53:54.032000050 +0000
++++ b/drivers/cpufreq/Makefile	2026-11-22 19:53:56.920000050 +0000
+@@ -10,6 +10,7 @@
+ 
+ # CPUfreq governors
+ obj-$(CONFIG_CPU_FREQ_GOV_PERFORMANCE)	+= cpufreq_performance.o
++obj-$(CONFIG_CPU_FREQ_GOV_SCARLET)	+= cpufreq_scarlet.o
+ obj-$(CONFIG_CPU_FREQ_GOV_POWERSAVE)	+= cpufreq_powersave.o
+ obj-$(CONFIG_CPU_FREQ_GOV_USERSPACE)	+= cpufreq_userspace.o
+ obj-$(CONFIG_CPU_FREQ_GOV_ONDEMAND)	+= cpufreq_ondemand.o
+diff -ruN a/drivers/devfreq/Kconfig b/drivers/devfreq/Kconfig
+--- a/drivers/devfreq/Kconfig	2026-11-22 19:53:55.108000050 +0000
++++ b/drivers/devfreq/Kconfig	2026-11-22 19:53:56.932000050 +0000
+@@ -49,6 +49,14 @@
+ 	  the DEVFREQ framework returns the highest frequency available
+ 	  at any time.
+ 
++config DEVFREQ_GOV_SCARLET
++	tristate "Scarlet (VoidPrjct gaming, lock max freq)"
++	help
++	  Always returns UINT_MAX as frequency so the DEVFREQ framework
++	  picks the highest OPP available. VoidPrjct-Scarlet gaming
++	  governor; devices that request a governor which is not built
++	  fall back to this one (see devfreq.c).
++
+ config DEVFREQ_GOV_POWERSAVE
+ 	tristate "Powersave"
+ 	help
+diff -ruN a/drivers/devfreq/Makefile b/drivers/devfreq/Makefile
+--- a/drivers/devfreq/Makefile	2026-11-22 19:53:55.768000050 +0000
++++ b/drivers/devfreq/Makefile	2026-11-22 19:53:56.948000050 +0000
+@@ -3,6 +3,7 @@
+ obj-$(CONFIG_PM_DEVFREQ_EVENT)	+= devfreq-event.o
+ obj-$(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND)	+= governor_simpleondemand.o
+ obj-$(CONFIG_DEVFREQ_GOV_PERFORMANCE)	+= governor_performance.o
++obj-$(CONFIG_DEVFREQ_GOV_SCARLET)	+= governor_scarlet.o
+ obj-$(CONFIG_DEVFREQ_GOV_POWERSAVE)	+= governor_powersave.o
+ obj-$(CONFIG_DEVFREQ_GOV_USERSPACE)	+= governor_userspace.o
+ obj-$(CONFIG_DEVFREQ_GOV_PASSIVE)	+= governor_passive.o
+diff -ruN a/drivers/devfreq/devfreq.c b/drivers/devfreq/devfreq.c
+--- a/drivers/devfreq/devfreq.c	2026-11-22 19:53:56.336000050 +0000
++++ b/drivers/devfreq/devfreq.c	2026-11-22 19:53:56.960000050 +0000
+@@ -901,10 +901,26 @@
+ 
+ 	governor = try_then_request_governor(devfreq->governor_name);
+ 	if (IS_ERR(governor)) {
+-		dev_err(dev, "%s: Unable to find governor for the device\n",
+-			__func__);
+-		err = PTR_ERR(governor);
+-		goto err_init;
++#ifdef CONFIG_DEVFREQ_GOV_SCARLET
++		/* Governor yang diminta vendor tidak ada di kernel ini
++		 * (konfigurasi Scarlet menghapusnya). Fallback ke governor
++		 * "scarlet" agar perangkat tetap ter-govern, bukan gagal
++		 * probe tanpa pengatur frekuensi.
++		 */
++		if (strncmp(devfreq->governor_name, "scarlet",
++			    DEVFREQ_NAME_LEN)) {
++			strscpy(devfreq->governor_name, "scarlet",
++				DEVFREQ_NAME_LEN);
++			governor = try_then_request_governor(
++					devfreq->governor_name);
++		}
++#endif
++		if (IS_ERR(governor)) {
++			dev_err(dev, "%s: Unable to find governor for the device\n",
++				__func__);
++			err = PTR_ERR(governor);
++			goto err_init;
++		}
+ 	}
+ 
+ 	devfreq->governor = governor;
