@@ -1,0 +1,101 @@
+name: upstream-stable
+
+# Naikkan kernel fork ke LTS terbaru (mis. 5.10.274) dengan menggabungkan
+# branch android12-5.10-lts dari AOSP common -- pola yang sama dengan riwayat
+# merge di fork ini. Semua berjalan di runner GitHub, tidak pernah lokal.
+# Kalau merge bentrok, job berhenti dan mengunggah artifact berisi konflik
+# supaya resolusinya bisa diputuskan, bukan ditebak.
+
+on:
+  workflow_dispatch:
+    inputs:
+      lts_commit:
+        description: "Commit tip android12-5.10-lts yang mau digabung"
+        type: string
+        default: c5acf8d66b6c3d1957c3bbf410370e06a68a6f40
+      expected_sublevel:
+        description: "SUBLEVEL Makefile yang diharapkan setelah merge"
+        type: string
+        default: "274"
+      kernel_branch:
+        description: "Branch fork kernel yang di-update"
+        type: string
+        default: android12-5.10
+
+concurrency:
+  group: upstream-stable
+  cancel-in-progress: false
+
+jobs:
+  upstream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Merge LTS ke fork kernel
+        env:
+          KERNEL_PAT: ${{ secrets.KERNEL_PAT }}
+          LTS: ${{ inputs.lts_commit }}
+          WANT_SUB: ${{ inputs.expected_sublevel }}
+          BRANCH: ${{ inputs.kernel_branch }}
+        run: |
+          set -euo pipefail
+          git config --global user.name "VoidPrjct upstream bot"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Partial clone: riwayat lengkap untuk merge-base, blob ditarik hanya
+          # yang disentuh merge. Jauh lebih kecil dari clone penuh.
+          git clone --filter=blob:none --branch "$BRANCH" \
+            "https://x-access-token:${KERNEL_PAT}@github.com/VoidPrjct/android_kernel_common-5.10.git" kernel
+          cd kernel
+
+          git remote add aosp https://android.googlesource.com/kernel/common
+          git fetch --no-tags aosp refs/heads/android12-5.10-lts
+          GOT=$(git rev-parse FETCH_HEAD)
+          echo "tip android12-5.10-lts = $GOT (pin $LTS)"
+          if [ "$GOT" != "$LTS" ]; then
+            # Pin boleh lebih tua dari tip; pastikan pin tetap bisa diambil.
+            git fetch --no-tags aosp "$LTS" || {
+              echo "::error::pin $LTS tidak ada/tidak bisa diambil dari aosp"
+              exit 1
+            }
+          fi
+          git cat-file -e "$LTS^{commit}"
+
+          echo "=== merge-base sebelum merge ==="
+          git merge-base HEAD "$LTS" || true
+
+          if ! git merge --no-edit "$LTS"; then
+            echo "::error::merge bentrok; daftar file:"
+            git diff --name-only --diff-filter=U | tee conflict-files.txt
+            {
+              for f in $(git diff --name-only --diff-filter=U); do
+                echo "===== $f ====="
+                git diff -- "$f" | head -200
+              done
+            } > conflict.log
+            exit 1
+          fi
+
+          SUB=$(awk '/^SUBLEVEL =/{print $3}' Makefile)
+          echo "SUBLEVEL setelah merge = $SUB (harap $WANT_SUB)"
+          if [ "$SUB" != "$WANT_SUB" ]; then
+            echo "::error::SUBLEVEL '$SUB' bukan '$WANT_SUB' setelah merge"
+            exit 1
+          fi
+
+          TIP=$(git rev-parse HEAD)
+          echo "tip baru: $TIP"
+          git log --oneline -3
+          git push origin HEAD:refs/heads/"$BRANCH"
+          echo "KERNEL_TIP=$TIP" >> "$GITHUB_ENV"
+
+      - name: Unggah log konflik (kalau gagal)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merge-conflicts-${{ github.run_id }}
+          path: |
+            kernel/conflict.log
+            kernel/conflict-files.txt
+          if-no-files-found: warn
