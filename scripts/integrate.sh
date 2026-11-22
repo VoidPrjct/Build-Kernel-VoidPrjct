@@ -143,8 +143,8 @@ python3 - "$SUSFS_P/50.patch" <<'PYEOF' >&2 || die "penyesuaian konteks clone_mn
 import sys
 p = sys.argv[1]
 s = open(p).read()
-old = " mnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL);\n"
-new = " mnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL|MNT_UMOUNT);\n"
+old = " \tmnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL);\n"
+new = " \tmnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL|MNT_UMOUNT);\n"
 n = s.count(old)
 if n == 1:
     open(p, "w").write(s.replace(old, new))
