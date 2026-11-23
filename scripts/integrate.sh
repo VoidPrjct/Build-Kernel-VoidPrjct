@@ -277,20 +277,12 @@ if ! git apply --verbose "$SCRIPTS_DIR/scarlet-gaming.patch" 2> "$WORKDIR/scarle
 fi
 log "governor 'scarlet' (CPU + devfreq) + fallback devfreq terpasang"
 
-# Matiin throttling suhu (CPU + GPU): stub registrasi cooling device.
-# Thermal zone & trip critical (auto-shutdown overheat) tetap jalan.
-if ! git apply --verbose "$SCRIPTS_DIR/no-thermal-throttle.patch" 2> "$WORKDIR/thermal-patch.err"; then
-    cat "$WORKDIR/thermal-patch.err" >&2
-    die "no-thermal-throttle.patch gagal di base ini (thermal/ berubah?)"
-fi
-log "throttling thermal CPU+GPU mati, trip critical tetap aktif"
-
-# Trip critical: log warning saja, TIDAK shutdown. Suhu tetap terpantau.
-if ! git apply --verbose "$SCRIPTS_DIR/no-critical-shutdown.patch" 2> "$WORKDIR/critical-patch.err"; then
-    cat "$WORKDIR/critical-patch.err" >&2
-    die "no-critical-shutdown.patch gagal di base ini (thermal_core.c berubah?)"
-fi
-log "critical shutdown mati (warning saja), thermal zone tetap hidup"
+# Thermal dibiarkan stok. Patch no-thermal-throttle dan no-critical-shutdown
+# TIDAK dipasang lagi: stub cooling yang mengembalikan NULL bukan ERR_PTR,
+# sehingga pemanggil yang hanya memeriksa IS_ERR akan memakai pointer NULL.
+# Di device MTK/Mali itu kandidat kuat bootloop saat probe gpufreq. Berkas
+# patch tetap disimpan di repo, hanya tidak diterapkan.
+log "thermal stok (no-thermal-throttle + no-critical-shutdown tidak dipasang)"
 
 # Label mode hook: hook tetap tracepoint, hanya nama yang tampil di manager
 # yang berubah Tracepoint -> Scarlet-Hook (kernel/supercall/dispatch.c KSU).
