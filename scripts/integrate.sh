@@ -193,6 +193,68 @@ if grep -qE '^static (struct page \*fake_status|void initialize_fake_status)' "$
 fi
 log "3 simbol selinux_hide dibuka untuk patch 50 (fake_status*)"
 
+# --- lsm_hook.c: fallback pencocokan target berdasar nama simbol (kernel CFI) -
+# Di kernel CFI (GKI android12-5.10 dengan CONFIG_CFI_CLANG), alamat hook yang
+# tersimpan di security_hook_heads adalah trampoline CFI `sym.<hash>.cfi_jt`,
+# sedangkan resolusi kallsyms bisa mengembalikan alamat body fungsi `sym`
+# (terlihat di device: resolved `selinux_setprocattr+0x0/0x3b8` tapi slot head
+# berisi varian .cfi_jt). Perbandingan alamat persis
+# (`current_origin == target`) gagal -> enable selinux_hide selalu -ENOENT,
+# yang muncul ke manager sebagai set_feature err -38 (ENOSYS dari goto unhook).
+# Fix: fallback pencocokan nama kallsyms (prefix + batas '.'/'$').
+LH="$KSU_DIR/kernel/hook/lsm_hook.c"
+[ -f "$LH" ] || die "hook/lsm_hook.c tidak ditemukan di $LH"
+
+python3 - "$LH" <<'PYEOF2'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+
+helper = '''// Fallback match by kallsyms symbol name. On CFI kernels (e.g. GKI
+// android12-5.10 with CONFIG_CFI_CLANG), the address stored in
+// security_hook_heads is the jump-table trampoline `sym.<hash>.cfi_jt`,
+// while kallsyms name resolution may return the plain function body, so
+// exact-address comparison fails. Compare names instead.
+static bool ksu_lsm_hook_target_name_match(const char *target_name, void *addr)
+{
+    char buf[KSYM_SYMBOL_LEN];
+    size_t len;
+
+    if (!addr)
+        return false;
+    if (!kallsyms_lookup((unsigned long)addr, NULL, NULL, NULL, buf))
+        return false;
+    len = strlen(target_name);
+    return strncmp(buf, target_name, len) == 0 &&
+           (buf[len] == '\\0' || buf[len] == '.' || buf[len] == '$');
+}
+
+int ksu_lsm_hook(struct ksu_lsm_hook *hook)
+'''
+old_decl = 'int ksu_lsm_hook(struct ksu_lsm_hook *hook)\n'
+old_cmp = 'if (current_origin == target) {'
+new_cmp = ('if (current_origin == target ||\n'
+           '                ksu_lsm_hook_target_name_match(hook->target_name, current_origin)) {')
+
+if 'ksu_lsm_hook_target_name_match' in s:
+    print('[integrate] lsm_hook.c: patch nama-target sudah terpasang')
+else:
+    n = s.count(old_decl)
+    if n != 1:
+        sys.exit('deklarasi ksu_lsm_hook tidak unik (count=%d)' % n)
+    s = s.replace(old_decl, helper)
+    n = s.count(old_cmp)
+    if n != 1:
+        sys.exit('perbandingan target tidak unik (count=%d)' % n)
+    s = s.replace(old_cmp, new_cmp)
+    open(p, 'w').write(s)
+    print('[integrate] lsm_hook.c: fallback pencocokan nama simbol dipasang (CFI)')
+PYEOF2
+
+grep -q 'ksu_lsm_hook_target_name_match' "$LH" \
+    || die "patch nama-target lsm_hook.c tidak masuk (pola file berubah?)"
+log "lsm_hook.c: fallback pencocokan nama simbol (CFI) dipasang"
+
 if ! git apply --verbose "$SUSFS_P/50.patch" 2> "$WORKDIR/patch50.err"; then
     cat "$WORKDIR/patch50.err" >&2
     warn "git apply gagal; coba git apply -3 (blob preimage biasanya ada di riwayat merge)"
