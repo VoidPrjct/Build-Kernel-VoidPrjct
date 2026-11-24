@@ -193,6 +193,20 @@ if grep -qE '^static (struct page \*fake_status|void initialize_fake_status)' "$
 fi
 log "3 simbol selinux_hide dibuka untuk patch 50 (fake_status*)"
 
+# --- Arahkan hook setprocattr KSU ke wrapper SUSFS ---------------------------
+# Patch 50 (security/selinux/hooks.c) mengganti registrasi hook setprocattr:
+#   LSM_HOOK_INIT(setprocattr, handle_selinux_setprocattr)  [CONFIG_KSU_SUSFS]
+# Jadi di security_hook_heads tidak ada lagi 'selinux_setprocattr'; hook KSU
+# gagal resolve/mencocokkan target (-ENOENT, muncul sebagai set_feature -38).
+# Solusi: pasang hook KSU di wrapper. original = wrapper SUSFS, sehingga
+# susfs_selinux_setprocattr (fake status) tetap dipanggil dari my_setprocattr.
+sed -i \
+  's/KSU_LSM_HOOK_INIT(setprocattr, "selinux_setprocattr", my_setprocattr, 0)/KSU_LSM_HOOK_INIT(setprocattr, "handle_selinux_setprocattr", my_setprocattr, 0)/' \
+  "$SH"
+grep -q 'KSU_LSM_HOOK_INIT(setprocattr, "handle_selinux_setprocattr", my_setprocattr, 0)' "$SH" \
+    || die "target setprocattr tidak berhasil diarahkan ke wrapper susfs (pola berubah?)"
+log "setprocattr KSU diarahkan ke wrapper susfs (handle_selinux_setprocattr)"
+
 # --- lsm_hook.c: fallback pencocokan target berdasar nama simbol (kernel CFI) -
 # Di kernel CFI (GKI android12-5.10 dengan CONFIG_CFI_CLANG), alamat hook yang
 # tersimpan di security_hook_heads adalah trampoline CFI `sym.<hash>.cfi_jt`,
