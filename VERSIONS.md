@@ -67,3 +67,12 @@ untuk device sejenis juga membatalkan update 275 dengan alasan sama.
 - Hasil merge 275 + resolusi konflik diarsipkan di branch `wip/upstream-275`
   (`99d99725`) — jangan dihapus, dipakai kalau nanti mau coba lagi pelan-pelan.
 - MGLRU juga masih diarsip di riwayat git repo build ini.
+
+## Revisi: MGLRU dipasang lagi di atas 274 (2026-11-24)
+
+Setelah bisect: #36 (275+MGLRU) dan #37 (275 tanpa MGLRU) bootloop -> pelakunya
+merge upstream 275, MGLRU belum terbukti bersalah. Sesuai keputusan user,
+MGLRU dipasang kembali di atas base 274 (98ab0310). Patch yang dipakai =
+versi fix 2-arg/3-arg (commit 3d3e2832, dengan page_lru eksplisit).
+Catatan: kombinasi 274+MGLRU belum pernah diuji boot -- kalau build ini
+bootloop juga, kandidat berikutnya MGLRU sendiri (hapus lagi).
