@@ -5,7 +5,7 @@ Semua komponen dipin ke SHA. Kalau pin berubah, ubah di sini dan di
 
 | Komponen | Pin | Catatan |
 |---|---|---|
-| Kernel base | `99d99725ad897f1ee6c9c7c131c713ec2055c22c` | android12-5.10, Linux 5.10.275 |
+| Kernel base | `98ab0310f2aec486e84d5d60c36d0575dfb5482a` | android12-5.10, Linux 5.10.274 |
 | KernelSU-Next | `896f45a78c0806cfd585c4e14e6989f867b143d7` | dev, 2026-11-21 "kernel: susfs (LKM): fix lsm_hook" |
 | SUSFS (susfs4ksu) | `45a05753` | v2.4.0, patch 50 built-in |
 | NoMount | `6849f00a342b` | built-in |
@@ -56,3 +56,14 @@ Build 5.10.275 + MGLRU (run #36) **bootloop** di device. MGLRU dihapus total
 dari pipeline (integrate.sh, scarlet.fragment, scripts/mglru.patch) sambil
 di-bisect: kernel tetap 5.10.275 (pin 99d99725). Patch MGLRU diarsipkan di
 riwayat git repo build, bisa dihidupkan lagi kalau nanti mau diteruskan.
+
+## PUTUSKAN: upstream 5.10.275 DITUNDA (2026-11-24)
+
+Build #36 (275+MGLRU) dan #37 (275 tanpa MGLRU) dua-duanya **bootloop**.
+Kesimpulan: pelakunya merge upstream 275-nya, bukan MGLRU. Maintainer lain
+untuk device sejenis juga membatalkan update 275 dengan alasan sama.
+
+- Branch `android12-5.10` fork dikembalikan ke `98ab0310` (274).
+- Hasil merge 275 + resolusi konflik diarsipkan di branch `wip/upstream-275`
+  (`99d99725`) — jangan dihapus, dipakai kalau nanti mau coba lagi pelan-pelan.
+- MGLRU juga masih diarsip di riwayat git repo build ini.
