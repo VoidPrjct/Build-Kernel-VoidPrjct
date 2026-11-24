@@ -19,6 +19,7 @@ Perbedaan API 5.10 vs 5.15 yang harus ditulis ulang:
 Catatan: patch ini BELUM pernah dikompilasi. Lihat bagian risiko di
 VERSIONS.md sebelum dipakai.
 
+
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
 @@ -468,6 +468,16 @@
@@ -38,6 +39,7 @@ VERSIONS.md sebelum dipakai.
  
  	u64				nr_migrations;
  
+
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -1275,6 +1275,23 @@
@@ -64,6 +66,7 @@ VERSIONS.md sebelum dipakai.
  
  config SCHED_AUTOGROUP
  	bool "Automatic process group scheduling"
+
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
 @@ -3292,6 +3292,154 @@
@@ -253,6 +256,7 @@ VERSIONS.md sebelum dipakai.
  
  	wait_bit_init();
  
+
 --- a/kernel/sched/debug.c
 +++ b/kernel/sched/debug.c
 @@ -523,6 +523,9 @@
@@ -265,6 +269,7 @@ VERSIONS.md sebelum dipakai.
  #ifdef CONFIG_NUMA_BALANCING
  	SEQ_printf(m, " %d %d", task_node(p), task_numa_group_id(p));
  #endif
+
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -19,6 +19,9 @@
@@ -277,7 +282,7 @@ VERSIONS.md sebelum dipakai.
   */
  #include "sched.h"
  
-@@ -276,6 +279,78 @@
+@@ -276,6 +279,81 @@
  	SCHED_WARN_ON(!entity_is_task(se));
  	return container_of(se, struct task_struct, se);
  }
@@ -318,14 +323,17 @@ VERSIONS.md sebelum dipakai.
 +}
 +
 +static void update_burst_score(struct sched_entity *se) {
++	struct task_struct *p;
++	u8 prio, prev_prio, new_prio;
++
 +	if (!entity_is_task(se)) return;
-+	struct task_struct *p = task_of(se);
-+	u8 prio = p->static_prio - MAX_RT_PRIO;
-+	u8 prev_prio = min(39, prio + se->burst_score);
++	p = task_of(se);
++	prio = p->static_prio - MAX_RT_PRIO;
++	prev_prio = min(39, prio + se->burst_score);
 +
 +	se->burst_score = se->burst_penalty >> 2;
 +
-+	u8 new_prio = min(39, prio + se->burst_score);
++	new_prio = min(39, prio + se->burst_score);
 +	/* 5.10: reweight_task() hanya menerima const struct load_weight *,
 +	 * jadi pembungkusan weight dilakukan di core.c (sched_bore_reweight). */
 +	if (new_prio != prev_prio)
@@ -430,6 +438,7 @@ VERSIONS.md sebelum dipakai.
  	place_entity(cfs_rq, se, 1);
  
  	if (sysctl_sched_child_runs_first && curr && entity_before(curr, se)) {
+
 --- a/kernel/sysctl.c
 +++ b/kernel/sysctl.c
 @@ -131,6 +131,19 @@
