@@ -59,7 +59,8 @@ sed -i -E 's/^PATCH_VBMETA_FLAG=.*/PATCH_VBMETA_FLAG=auto/' anykernel.sh
 # anykernel.sh TIDAK di-source oleh AnyKernel3; ia dibaca dengan
 # file_getprop() = `grep "^name=" | tail -n1 | cut -d= -f2-`. Jadi nilai di sini
 # harus polos: menambahkan tanda kutip akan ikut tercetak di layar recovery.
-sed -i -E "s|^kernel\.string=.*|kernel.string=VoidPrjct-Scarlet ${KERNEL_VERSION} (KernelSU-Next + SUSFS + NoMount)|" anykernel.sh
+# Format: 5.10.27X-VoidPrjct-Scarlet (tanpa embel-embel KSU/SUSFS/NoMount).
+sed -i -E "s|^kernel\.string=.*|kernel.string=${KERNEL_VERSION}-VoidPrjct-Scarlet|" anykernel.sh
 
 # PRD 8: devicecheck dimatikan, dan nama device tidak boleh mengklaim device
 # tertentu. device.name1 diisi label kernel (dipakai sebagian installer untuk
@@ -73,7 +74,7 @@ sed -i -E '/^device\.name[2-5]=/d' anykernel.sh
 for kv in 'do.devicecheck=0' 'do.modules=0' 'do.systemless=1' 'do.cleanup=1' 'do.cleanuponabort=0' 'BLOCK=boot'; do
   grep -q "^$kv\$" anykernel.sh || die "gagal set '$kv' di anykernel.sh (template berubah?)"
 done
-grep -q '^kernel.string=VoidPrjct-Scarlet ' anykernel.sh || die "kernel.string tidak terpasang"
+grep -q "^kernel.string=${KERNEL_VERSION}-VoidPrjct-Scarlet\$" anykernel.sh || die "kernel.string tidak terpasang"
 grep -q '^device.name1=VoidPrjct-Scarlet$' anykernel.sh || die "device.name1 tidak terpasang"
 if grep -qE '^device\.name[2-5]=' anykernel.sh; then
   die "masih ada device.name2..5 (nama device contoh dari template)"
@@ -81,6 +82,38 @@ fi
 if grep -qE '^(kernel\.string|device\.name1)="' anykernel.sh; then
   die "nilai berkutip: anykernel.sh dibaca dengan grep/cut, kutip akan ikut tercetak"
 fi
+
+# Banner SCARLET: disisipkan sebelum dump_boot sehingga tampil paling awal
+# di layar recovery saat flash. Art pakai blok 5 baris (<=46 kolom, muat
+# layar recovery), semua karakter aman double-quote bash: backslash hanya
+# pernah muncul diikuti karakter non-khusus, jadi tetap literal.
+python3 - "$KERNEL_VERSION" <<'PYEOF' || die "penyisipan banner gagal"
+import sys
+kver = sys.argv[1]
+path = "anykernel.sh"
+s = open(path).read()
+anchor = "\ndump_boot;"
+assert s.count(anchor) == 1, "anchor dump_boot tidak unik"
+banner = (
+    'ui_print " ";\n'
+    'ui_print "  ____  _____ _   _  ____ _____ ___  ____  ";\n'
+    'ui_print " / ___|| ____| \\ | |/ ___|_   _/ _ \\/ ___| ";\n'
+    'ui_print " \\___ \\|  _| |  \\| | \\___ \\ | || | | \\___ \\ ";\n'
+    'ui_print "  ___) | |___| |\\  |  ___) || || |_| |___) |";\n'
+    'ui_print " |____/|_____|_| \\_| |____/ |_| \\___/|____/ ";\n'
+    'ui_print " ";\n'
+    'ui_print "      GKI KERNEL ANDROID12-5.10      ";\n'
+    'ui_print "      Kernel: %s-VoidPrjct-Scarlet      ";\n' % kver +
+    'ui_print " ";\n'
+)
+s = s.replace(anchor, "\n" + banner + "dump_boot;", 1)
+open(path, "w").write(s)
+print("[ak3] banner SCARLET disisipkan")
+PYEOF
+
+grep -q 'ui_print "  ____  _____' anykernel.sh || die "banner SCARLET tidak terpasang"
+grep -q 'GKI KERNEL ANDROID12-5.10' anykernel.sh || die "banner subtitle tidak terpasang"
+grep -q 'Kernel: .*-VoidPrjct-Scarlet' anykernel.sh || die "banner versi kernel tidak terpasang"
 
 sh -n anykernel.sh || die "anykernel.sh tidak lolos 'sh -n'"
 
