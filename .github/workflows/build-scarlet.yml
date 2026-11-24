@@ -391,7 +391,7 @@ jobs:
       - name: Buat rilis
         # Dipisah dari keberhasilan push: Image dan zip sudah jadi sebelum
         # langkah push, jadi kegagalan push tidak boleh membatalkan rilis.
-        if: inputs.create_release && inputs.mode == 'build' && !cancelled()
+        if: inputs.create_release && inputs.mode == 'build' && !cancelled() && steps.package.outputs.zip != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
