@@ -59,23 +59,23 @@ sed -i -E 's/^PATCH_VBMETA_FLAG=.*/PATCH_VBMETA_FLAG=auto/' anykernel.sh
 # anykernel.sh TIDAK di-source oleh AnyKernel3; ia dibaca dengan
 # file_getprop() = `grep "^name=" | tail -n1 | cut -d= -f2-`. Jadi nilai di sini
 # harus polos: menambahkan tanda kutip akan ikut tercetak di layar recovery.
-# Format: 5.10.27X-VoidPrjct-Scarlet (tanpa embel-embel KSU/SUSFS/NoMount).
-sed -i -E "s|^kernel\.string=.*|kernel.string=${KERNEL_VERSION}-VoidPrjct-Scarlet|" anykernel.sh
+# Format: 5.10.27X-Scarlet (tanpa embel-embel KSU/SUSFS/NoMount).
+sed -i -E "s|^kernel\.string=.*|kernel.string=${KERNEL_VERSION}-Scarlet|" anykernel.sh
 
 # PRD 8: devicecheck dimatikan, dan nama device tidak boleh mengklaim device
 # tertentu. device.name1 diisi label kernel (dipakai sebagian installer untuk
 # mencetak nama kernel), device.name2..5 dihapus supaya tidak ada sisa nama
 # contoh (maguro/toro/...). file_getprop memakai `tail -n1`, jadi jumlah baris
 # tidak memengaruhi pembacaan -- ini murni kebersihan isi zip.
-sed -i -E "s|^device\.name1=.*|device.name1=VoidPrjct-Scarlet|" anykernel.sh
+sed -i -E "s|^device\.name1=.*|device.name1=Scarlet|" anykernel.sh
 sed -i -E '/^device\.name[2-5]=/d' anykernel.sh
 
 # Cek hasil sed benar-benar kena; kalau tidak, lebih baik gagal daripada diam-diam salah.
 for kv in 'do.devicecheck=0' 'do.modules=0' 'do.systemless=1' 'do.cleanup=1' 'do.cleanuponabort=0' 'BLOCK=boot'; do
   grep -q "^$kv\$" anykernel.sh || die "gagal set '$kv' di anykernel.sh (template berubah?)"
 done
-grep -q "^kernel.string=${KERNEL_VERSION}-VoidPrjct-Scarlet\$" anykernel.sh || die "kernel.string tidak terpasang"
-grep -q '^device.name1=VoidPrjct-Scarlet$' anykernel.sh || die "device.name1 tidak terpasang"
+grep -q "^kernel.string=${KERNEL_VERSION}-Scarlet\$" anykernel.sh || die "kernel.string tidak terpasang"
+grep -q '^device.name1=Scarlet$' anykernel.sh || die "device.name1 tidak terpasang"
 if grep -qE '^device\.name[2-5]=' anykernel.sh; then
   die "masih ada device.name2..5 (nama device contoh dari template)"
 fi

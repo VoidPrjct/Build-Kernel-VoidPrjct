@@ -56,7 +56,7 @@ env:
   NEUTRON_TAG: "06092026"
   NEUTRON_ASSET: neutron-clang-06092026.tar.zst
   # Identitas di string "Linux version" (uname -a):
-  #   Linux version 5.10.274-VoidPrjct-Scarlet (scarlet@voidprjct) ...
+  #   Linux version 5.10.274-Scarlet (scarlet@voidprjct) ...
   # Timestamp (KBUILD_BUILD_TIMESTAMP, zona WIB) diset oleh step
   # "Set metadata build kernel" lewat $GITHUB_ENV supaya semua make
   # memakai nilai yang sama.
@@ -296,14 +296,14 @@ jobs:
           ls -l kernel/out/arch/arm64/boot/Image
           ccache -s || true
 
-      # Nama kernel harus 5.10.272-VoidPrjct-Scarlet, tanpa "-g<hash>". Dicek dari
+      # Nama kernel harus 5.10.274-Scarlet, tanpa "-g<hash>". Dicek dari
       # out/include/config/kernel.release (ada setelah 'make prepare', jadi berlaku
       # di mode check dan build). Di mode build, banner di dalam Image juga dicek:
       # itu string yang tampil sebagai "Linux version" dan uname -r di device.
       - name: Verifikasi nama kernel
         run: |
           set -euo pipefail
-          EXPECT="${KVER}-VoidPrjct-Scarlet"
+          EXPECT="${KVER}-Scarlet"
           REL=$(cat kernel/out/include/config/kernel.release)
           echo "kernel.release = $REL (harus $EXPECT)"
           if [ "$REL" != "$EXPECT" ]; then
@@ -338,7 +338,7 @@ jobs:
         run: |
           set -euo pipefail
           DATE=$(date -u +%Y%m%d)
-          ZIP="$PWD/VoidPrjct-Scarlet-${KVER}-${DATE}.zip"
+          ZIP="$PWD/Scarlet-${KVER}-${DATE}.zip"
           KERNEL_VERSION="$KVER" ./scripts/package-anykernel.sh "$KERNEL_DIR" "$ZIP"
           # GITHUB_OUTPUT dipakai untuk langkah berikut yang membutuhkan nilai ini
           # di ekspresi langkah. Nilai dari GITHUB_ENV hanya masuk ke environment
@@ -357,7 +357,7 @@ jobs:
         if: inputs.mode == 'build'
         uses: actions/upload-artifact@v4
         with:
-          name: VoidPrjct-Scarlet-${{ steps.package.outputs.kver }}-${{ github.run_number }}
+          name: Scarlet-${{ steps.package.outputs.kver }}-${{ github.run_number }}
           path: ${{ steps.package.outputs.zip }}
           if-no-files-found: error
 
@@ -414,7 +414,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > RELEASE_NOTES.md <<EOF
-          VoidPrjct-Scarlet ${KVER}
+          Scarlet ${KVER}
 
           Komponen:
           - KernelSU-Next: ${KSU_SHA}
@@ -443,7 +443,7 @@ jobs:
             gh release edit "$TAG" --notes-file RELEASE_NOTES.md
           else
             gh release create "$TAG" "$ZIP_PATH" VERSIONS.md \
-              --title "VoidPrjct-Scarlet ${KVER}" \
+              --title "Scarlet ${KVER}" \
               --notes-file RELEASE_NOTES.md
           fi
           gh release view "$TAG" --json url,tagName,assets \

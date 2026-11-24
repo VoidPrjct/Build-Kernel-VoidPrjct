@@ -42,10 +42,6 @@ WANT_Y=(
   CONFIG_DEVFREQ_GOV_SCARLET
   # simple_ondemand wajib: di-select drivers/scsi/ufs/Kconfig (storage UFS).
   CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND
-  # BORE: default y di init/Kconfig, tapi tetap diperiksa supaya kalau
-  # suatu saat olddefconfig membuangnya (mis. konflik Kconfig), build
-  # gagal di sini dan bukan jadi kernel tanpa scheduler BORE.
-  CONFIG_SCHED_BORE
 )
 WANT_NOTSET=(
   CONFIG_LTO_CLANG_FULL
@@ -65,8 +61,8 @@ WANT_NOTSET=(
   CONFIG_DEVFREQ_GOV_USERSPACE
   CONFIG_DEVFREQ_GOV_PASSIVE
 )
-# Nama kernel: uname -r = <versi>-VoidPrjct-Scarlet.
-WANT_LOCALVERSION="-VoidPrjct-Scarlet"
+# Nama kernel: uname -r = <versi>-Scarlet.
+WANT_LOCALVERSION="-Scarlet"
 
 fail=0
 echo "[verify] memeriksa $CONFIG"
