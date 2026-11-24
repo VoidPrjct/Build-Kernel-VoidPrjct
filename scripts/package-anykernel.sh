@@ -84,26 +84,25 @@ if grep -qE '^(kernel\.string|device\.name1)="' anykernel.sh; then
 fi
 
 # Banner SCARLET: disisipkan sebelum dump_boot sehingga tampil paling awal
-# di layar recovery saat flash. Art pakai blok 5 baris (<=46 kolom, muat
-# layar recovery), semua karakter aman double-quote bash: backslash hanya
-# pernah muncul diikuti karakter non-khusus, jadi tetap literal.
+# di layar recovery saat flash. Font box-bar pilihan user (2026-11-24),
+# semua baris ui_print pakai single-quote, backslash literal.
 python3 - "$KERNEL_VERSION" <<'PYEOF' || die "penyisipan banner gagal"
 import sys
-kver = sys.argv[1]
 path = "anykernel.sh"
 s = open(path).read()
 anchor = "\ndump_boot;"
 assert s.count(anchor) == 1, "anchor dump_boot tidak unik"
 banner = (
     'ui_print " ";\n'
-    'ui_print "  ____  _____ _   _  ____ _____ ___  ____  ";\n'
-    'ui_print " / ___|| ____| \\ | |/ ___|_   _/ _ \\/ ___| ";\n'
-    'ui_print " \\___ \\|  _| |  \\| | \\___ \\ | || | | \\___ \\ ";\n'
-    'ui_print "  ___) | |___| |\\  |  ___) || || |_| |___) |";\n'
-    'ui_print " |____/|_____|_| \\_| |____/ |_| \\___/|____/ ";\n'
-    'ui_print " ";\n'
-    'ui_print "      GKI KERNEL ANDROID12-5.10      ";\n'
-    'ui_print "      Kernel: %s-VoidPrjct-Scarlet      ";\n' % kver +
+    r"ui_print '=============================================';" + "\n"
+    r"ui_print ' ____   ____    _    ____  _     _____ _____ ';" + "\n"
+    r"ui_print '/ ___| / ___|  / \  |  _ \| |   | ____|_   _|';" + "\n"
+    r"ui_print '\___ \| |     / _ \ | |_) | |   |  _|   | |  ';" + "\n"
+    r"ui_print ' ___) | |___ / ___ \|  _ <| |___| |___  | |  ';" + "\n"
+    r"ui_print '|____/ \____/_/   \_\_| \_\_____|_____| |_|  ';" + "\n"
+    r"ui_print '---------------------------------------------';" + "\n"
+    r"ui_print '      GKI KERNEL  |  ANDROID 12  |  5.10';" + "\n"
+    r"ui_print '=============================================';" + "\n"
     'ui_print " ";\n'
 )
 s = s.replace(anchor, "\n" + banner + "dump_boot;", 1)
@@ -127,9 +126,8 @@ open(path, "w").write(s)
 print("[ak3] patch_cmdline boot cepat disisipkan")
 PYEOF
 
-grep -q 'ui_print "  ____  _____' anykernel.sh || die "banner SCARLET tidak terpasang"
-grep -q 'GKI KERNEL ANDROID12-5.10' anykernel.sh || die "banner subtitle tidak terpasang"
-grep -q 'Kernel: .*-VoidPrjct-Scarlet' anykernel.sh || die "banner versi kernel tidak terpasang"
+grep -q "ui_print ' ____   ____    _    ____  _     _____ _____ '" anykernel.sh || die "banner SCARLET tidak terpasang"
+grep -q "GKI KERNEL  |  ANDROID 12  |  5.10" anykernel.sh || die "banner subtitle tidak terpasang"
 grep -q 'patch_cmdline module.async_probe' anykernel.sh || die "patch_cmdline async_probe tidak terpasang"
 grep -q 'patch_cmdline loglevel' anykernel.sh || die "patch_cmdline loglevel tidak terpasang"
 
