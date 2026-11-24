@@ -108,28 +108,10 @@ banner = (
 s = s.replace(anchor, "\n" + banner + "dump_boot;", 1)
 open(path, "w").write(s)
 print("[ak3] banner SCARLET disisipkan")
-
-# Boot lebih cepet (aman): jalankan SETELAH dump_boot (butuh SPLITIMG),
-# sebelum write_boot. Tanpa ini driver di-probe seriel satu per satu dan
-# console dihujani log -- keduanya makan waktu detik-an di fase init kernel.
-# - module.async_probe=true : probe modul paralel (param global, 5.10 ada)
-# - loglevel=4              : sama seperti 'quiet', console cuma warning ke atas
-boot_anchor = "\nwrite_boot;"
-assert s.count(boot_anchor) == 1, "anchor write_boot tidak unik"
-fastboot = (
-    "# boot lebih cepet: probe driver paralel + kurangi log kernel console\n"
-    'patch_cmdline module.async_probe "module.async_probe=true";\n'
-    'patch_cmdline loglevel "loglevel=4";\n'
-)
-s = s.replace(boot_anchor, "\n" + fastboot + "write_boot;", 1)
-open(path, "w").write(s)
-print("[ak3] patch_cmdline boot cepat disisipkan")
 PYEOF
 
 grep -q "ui_print ' ____   ____    _    ____  _     _____ _____ '" anykernel.sh || die "banner SCARLET tidak terpasang"
 grep -q "GKI KERNEL  |  ANDROID 12  |  5.10" anykernel.sh || die "banner subtitle tidak terpasang"
-grep -q 'patch_cmdline module.async_probe' anykernel.sh || die "patch_cmdline async_probe tidak terpasang"
-grep -q 'patch_cmdline loglevel' anykernel.sh || die "patch_cmdline loglevel tidak terpasang"
 
 sh -n anykernel.sh || die "anykernel.sh tidak lolos 'sh -n'"
 
