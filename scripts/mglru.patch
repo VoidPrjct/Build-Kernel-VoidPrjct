@@ -1003,6 +1003,30 @@ index 94b7b9d..f4ada47 100644
  
  #define PAGE_FLAGS_PRIVATE				\
  	(1UL << PG_private | 1UL << PG_private_2)
+diff --git a/include/linux/pgtable.h b/include/linux/pgtable.h
+index 774b9d0..85648b4 100644
+--- a/include/linux/pgtable.h
++++ b/include/linux/pgtable.h
+@@ -241,6 +241,19 @@ static inline int pmdp_clear_flush_young(struct vm_area_struct *vma,
+ #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+ #endif
+ 
++#ifndef arch_has_hw_pte_young
++/*
++ * Return whether the accessed bit is supported on the local CPU.
++ *
++ * This stub assumes accessing through an old PTE triggers a page fault.
++ * Architectures that automatically set the access bit should overwrite it.
++ */
++static inline bool arch_has_hw_pte_young(void)
++{
++	return false;
++}
++#endif
++
+ #ifndef __HAVE_ARCH_PTEP_GET_AND_CLEAR
+ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
+ 				       unsigned long address,
 diff --git a/include/linux/sched.h b/include/linux/sched.h
 index f733968..462728f 100644
 --- a/include/linux/sched.h
@@ -1488,7 +1512,7 @@ index 16b2bc4..d495fa6 100644
  
  		local_lock(&lru_pvecs.lock);
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index 9541495..c6c831e 100644
+index 9541495..dacb070 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -51,6 +51,10 @@
@@ -3393,7 +3417,7 @@ index 9541495..c6c831e 100644
 +		success = lru_gen_del_page(lruvec, page, true);
 +		VM_WARN_ON_ONCE_PAGE(!success, page);
 +		SetPageUnevictable(page);
-+		add_page_to_lru_list(page, lruvec);
++		add_page_to_lru_list(page, lruvec, page_lru(page));
 +		__count_vm_events(UNEVICTABLE_PGCULLED, delta);
 +		return true;
 +	}
@@ -3403,7 +3427,7 @@ index 9541495..c6c831e 100644
 +		success = lru_gen_del_page(lruvec, page, true);
 +		VM_WARN_ON_ONCE_PAGE(!success, page);
 +		SetPageSwapBacked(page);
-+		add_page_to_lru_list_tail(page, lruvec);
++		add_page_to_lru_list_tail(page, lruvec, page_lru(page));
 +		return true;
 +	}
 +
@@ -3928,7 +3952,7 @@ index 9541495..c6c831e 100644
 +			VM_WARN_ON_ONCE_PAGE(page_is_file_lru(page) != type, page);
 +			VM_WARN_ON_ONCE_PAGE(page_lru_gen(page) != -1, page);
 +
-+			del_page_from_lru_list(page, lruvec);
++			del_page_from_lru_list(page, lruvec, page_lru(page));
 +			success = lru_gen_add_page(lruvec, page, false);
 +			VM_WARN_ON_ONCE(!success);
 +
@@ -3959,7 +3983,7 @@ index 9541495..c6c831e 100644
 +
 +			success = lru_gen_del_page(lruvec, page, false);
 +			VM_WARN_ON_ONCE(!success);
-+			add_page_to_lru_list(page, lruvec);
++			add_page_to_lru_list(page, lruvec, page_lru(page));
 +
 +			if (!--remaining)
 +				return false;
@@ -5005,27 +5029,3 @@ index 975a4d2..c4a6bc0 100644
  
  	rcu_read_lock();
  	/*
-diff --git a/include/linux/pgtable.h b/include/linux/pgtable.h
-index 774b9d0..85648b4 100644
---- a/include/linux/pgtable.h
-+++ b/include/linux/pgtable.h
-@@ -241,6 +241,19 @@ static inline int pmdp_clear_flush_young(struct vm_area_struct *vma,
- #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
- #endif
- 
-+#ifndef arch_has_hw_pte_young
-+/*
-+ * Return whether the accessed bit is supported on the local CPU.
-+ *
-+ * This stub assumes accessing through an old PTE triggers a page fault.
-+ * Architectures that automatically set the access bit should overwrite it.
-+ */
-+static inline bool arch_has_hw_pte_young(void)
-+{
-+	return false;
-+}
-+#endif
-+
- #ifndef __HAVE_ARCH_PTEP_GET_AND_CLEAR
- static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
- 				       unsigned long address,
