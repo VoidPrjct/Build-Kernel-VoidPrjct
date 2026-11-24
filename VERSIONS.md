@@ -76,3 +76,12 @@ MGLRU dipasang kembali di atas base 274 (98ab0310). Patch yang dipakai =
 versi fix 2-arg/3-arg (commit 3d3e2832, dengan page_lru eksplisit).
 Catatan: kombinasi 274+MGLRU belum pernah diuji boot -- kalau build ini
 bootloop juga, kandidat berikutnya MGLRU sendiri (hapus lagi).
+
+## HASIL AKHIR bisect (2026-11-24, malam)
+
+Build #39 (274 + MGLRU): boot jalan tapi crash/reboot 30 detik-1 menit.
+Kesimpulan final: **MGLRU backport belum stabil di base ini** (dugaan kuat
+crash saat reclaim/LRU aktif setelah userspace jalan). Keputusan: MGLRU
+dihapus lagi dari pipeline. Konfigurasi stabil = 274 + KSU/SUSFS/NoMount +
+scarlet, tanpa MGLRU. Patch tetap diarsip di riwayat git (commit 6ab86f69),
+JANGAN dipasang lagi sebelum ada waktu debug serius (ramdump/last_kmsg).
