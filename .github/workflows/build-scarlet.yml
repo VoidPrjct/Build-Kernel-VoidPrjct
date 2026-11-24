@@ -23,7 +23,7 @@ on:
       ksu_sha:
         description: "SHA KernelSU-Next"
         type: string
-        default: 32e25d58fc1a187e1abe7278904c31571235fc83
+        default: 896f45a78c0806cfd585c4e14e6989f867b143d7
       susfs_commit:
         description: "Commit susfs4ksu (v2.4.0 = 45a05753)"
         type: string
