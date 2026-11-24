@@ -360,7 +360,9 @@ jobs:
           if-no-files-found: warn
 
       - name: Push branch integrasi ke fork
-        if: inputs.push_integration && success()
+        if: inputs.push_integration && !cancelled()
+        env:
+          KERNEL_PAT: ${{ secrets.KERNEL_PAT }}
         run: |
           set -euo pipefail
           cd kernel
@@ -372,13 +374,24 @@ jobs:
           git add -A
           if git diff --cached --quiet; then
             echo "tidak ada perubahan untuk di-commit"
-          else
-            git commit -m "scarlet: integrasi KernelSU-Next ${KSU_SHA:0:12} + SUSFS ${SUSFS_COMMIT} + NoMount ${NOMOUNT_SHA:0:12}"
-            git push --force origin HEAD:refs/heads/scarlet/android12-5.10
+            exit 0
           fi
+          git commit -m "scarlet: integrasi KernelSU-Next ${KSU_SHA:0:12} + SUSFS ${SUSFS_COMMIT} + NoMount ${NOMOUNT_SHA:0:12}"
+          # actions/checkout memasang http.https://github.com/.extraheader berisi
+          # GITHUB_TOKEN, dan header itu MENIMPA kredensial di URL remote. Token
+          # workflow hanya berizin pada repo build, bukan repo kernel, jadi push
+          # ditolak "Invalid username or token" (run 45322961107). Header itu
+          # dikosongkan untuk perintah ini saja, dan remote diisi ulang dari
+          # secret KERNEL_PAT supaya tidak bergantung pada URL hasil clone.
+          git remote set-url origin \
+            "https://x-access-token:${KERNEL_PAT}@github.com/VoidPrjct/android_kernel_common-5.10.git"
+          git -c http.https://github.com/.extraheader= push --force origin \
+            HEAD:refs/heads/scarlet/android12-5.10
 
       - name: Buat rilis
-        if: inputs.create_release && inputs.mode == 'build' && success()
+        # Dipisah dari keberhasilan push: Image dan zip sudah jadi sebelum
+        # langkah push, jadi kegagalan push tidak boleh membatalkan rilis.
+        if: inputs.create_release && inputs.mode == 'build' && !cancelled()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -390,7 +403,7 @@ jobs:
           - KernelSU-Next: ${KSU_SHA}
           - SUSFS: ${SUSFS_COMMIT} (v2.4.0, built-in via patch 50)
           - NoMount: ${NOMOUNT_SHA} (built-in)
-          - Kernel base: ${KERNEL_SHA} (5.10.272)
+          - Kernel base: ${KERNEL_SHA} (${KVER})
           - Neutron Clang: ${NEUTRON_TAG}
           - AnyKernel3: ${AK3_SHA}
 
