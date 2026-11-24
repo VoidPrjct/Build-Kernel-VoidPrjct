@@ -55,6 +55,13 @@ env:
   AK3_SHA: 41f04bdb4ee3
   NEUTRON_TAG: "06092026"
   NEUTRON_ASSET: neutron-clang-06092026.tar.zst
+  # Identitas di string "Linux version" (uname -a):
+  #   Linux version 5.10.274-VoidPrjct-Scarlet (scarlet@voidprjct) ...
+  # Timestamp (KBUILD_BUILD_TIMESTAMP, zona WIB) diset oleh step
+  # "Set metadata build kernel" lewat $GITHUB_ENV supaya semua make
+  # memakai nilai yang sama.
+  KBUILD_BUILD_USER: scarlet
+  KBUILD_BUILD_HOST: voidprjct
 
 jobs:
   build:
@@ -161,6 +168,12 @@ jobs:
           clang --version | tee clang-version.txt
           echo "bin dir: $BIN_DIR"
           touch toolchain/neutron/.ok
+
+      # KBUILD_BUILD_TIMESTAMP zona WIB (default runner = UTC). Diset sekali
+      # lewat $GITHUB_ENV supaya semua panggilan make (defconfig, check, build)
+      # memakai timestamp yang sama di string "Linux version".
+      - name: Set metadata build kernel
+        run: echo "KBUILD_BUILD_TIMESTAMP=$(TZ=Asia/Jakarta date '+%a %b %d %H:%M:%S WIB %Y')" >> "$GITHUB_ENV"
 
       - name: Siapkan konfigurasi
         env:
