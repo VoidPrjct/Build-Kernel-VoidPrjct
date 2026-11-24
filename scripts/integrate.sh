@@ -379,10 +379,32 @@ grep -qF '"Tracepoint"' "$DISPATCH" && die "masih ada label Tracepoint"
 log "mode hook tampil sebagai Scarlet-Hook (hook tetap Tracepoint)"
 
 # ---------------------------------------------------------------------------
-# 6. Ringkasan hasil
+# 6. BORE (Burst-Oriented Response Enhancer) - port 5.15.1.0 ke 5.10
+# ---------------------------------------------------------------------------
+# Patch ini mengubah kernel/sched/*, jadi diletakkan PALING AKHIR supaya kalau
+# gagal, semua langkah sebelumnya sudah terverifikasi dan penyebabnya jelas.
+# Tidak menyentuh berkas yang dipatch langkah lain (SUSFS/Scarlet), tapi karena
+# `git apply` bersifat atomik, konflik di schedulers akan menggagalkan build di
+# sini, bukan diam-diam.
+log "== BORE scheduler =="
+BORE_PATCH="$SCRIPTS_DIR/bore-5.1.0-510.patch"
+[ -s "$BORE_PATCH" ] || die "patch BORE hilang: $BORE_PATCH"
+if ! git apply --verbose "$BORE_PATCH" 2> "$WORKDIR/bore-patch.err"; then
+    cat "$WORKDIR/bore-patch.err" >&2
+    die "bore-5.1.0-510.patch gagal di base ini (kernel/sched/* berubah?)"
+fi
+grep -q 'Burst-Oriented Response Enhancer' kernel/sched/fair.c \
+    || die "patch BORE masuk tapi header fair.c tidak berubah"
+grep -q 'sched_bore_reweight' kernel/sched/core.c \
+    || die "patch BORE masuk tapi sched_bore_reweight() tidak ada di core.c"
+log "BORE 5.1.0 terpasang (fair.c + core.c + sysctl + Kconfig)"
+
+# ---------------------------------------------------------------------------
+# 7. Ringkasan hasil
 # ---------------------------------------------------------------------------
 log "== ringkasan =="
 log "KernelSU-Next : $GOT_KSU"
 log "SUSFS        : $SUSFS_COMMIT (v2.4.0, patch 50 built-in)"
 log "NoMount      : $GOT_NM"
+log "BORE         : 5.1.0 (port 5.15 ke 5.10, burst_score di sched_debug)"
 log "integrasi selesai"

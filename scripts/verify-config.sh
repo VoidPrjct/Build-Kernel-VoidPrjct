@@ -42,6 +42,10 @@ WANT_Y=(
   CONFIG_DEVFREQ_GOV_SCARLET
   # simple_ondemand wajib: di-select drivers/scsi/ufs/Kconfig (storage UFS).
   CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND
+  # BORE: default y di init/Kconfig, tapi tetap diperiksa supaya kalau
+  # suatu saat olddefconfig membuangnya (mis. konflik Kconfig), build
+  # gagal di sini dan bukan jadi kernel tanpa scheduler BORE.
+  CONFIG_SCHED_BORE
 )
 WANT_NOTSET=(
   CONFIG_LTO_CLANG_FULL
