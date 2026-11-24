@@ -23,13 +23,6 @@ CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y
 ## NoMount built-in (PRD 6.4)
 CONFIG_NOMOUNT=y
 
-## MGLRU — multi-gen LRU backport dari android13-5.10 (patch scripts/mglru.patch).
-## LRU_GEN_ENABLED membuat static key core menyala sejak boot; tanpa itu bisa
-## dinyalakan runtime lewat: echo y > /sys/kernel/mm/lru_gen/enabled
-CONFIG_LRU_GEN=y
-CONFIG_LRU_GEN_ENABLED=y
-# CONFIG_LRU_GEN_STATS is not set
-
 ## LTO thin (PRD 6.5). Folder arch/Kconfig pada base commit:
 ##   config LTO (629), LTO_CLANG (634), LTO_NONE (680),
 ##   LTO_CLANG_FULL (685), LTO_CLANG_THIN (704)
