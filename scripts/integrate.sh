@@ -44,6 +44,27 @@ log "versi kernel: $KVER"
 [ "$KVER" = "5.10.272" ] || warn "versi kernel $KVER, VERSIONS.md mencatat 5.10.272"
 
 # ---------------------------------------------------------------------------
+# 0. MGLRU (multi-gen LRU) — backport dari android13-5.10
+# ---------------------------------------------------------------------------
+# Dipasang PALING AWAL: patch dibuat (3-way) terhadap tree fork pada
+# 98ab0310 persis, jadi di sini wajib apply bersih tanpa fuzz. Semua
+# komponen lain (KSU/SUSFS/Scarlet) menyentuh file yang berbeda-beda
+# regionnya (dihunis: hunk fs/exec.c & mm/memory.c SUSFS 50 tidak
+# bertabrakan dengan hunk MGLRU), sehingga urutan ini paling aman.
+# CONFIG_LRU_GEN dinyalakan lewat scarlet.fragment.
+log "== MGLRU =="
+MGLRU_PATCH="$SCRIPTS_DIR/mglru.patch"
+[ -s "$MGLRU_PATCH" ] || die "file MGLRU hilang: $MGLRU_PATCH"
+if ! git apply --check --whitespace=nowarn "$MGLRU_PATCH" 2> "$WORKDIR/mglru.err"; then
+    cat "$WORKDIR/mglru.err" >&2
+    die "mglru.patch tidak bisa di-apply ke tree ini (base fork berubah?)"
+fi
+git apply --whitespace=nowarn "$MGLRU_PATCH"
+grep -q 'config LRU_GEN$' mm/Kconfig || die "CONFIG_LRU_GEN tidak masuk ke mm/Kconfig"
+grep -q 'lru_gen_shrink_lruvec' mm/vmscan.c || die "kode MGLRU tidak ada di mm/vmscan.c"
+log "MGLRU terpasang ($(grep -c '^diff --git' "$MGLRU_PATCH") file)"
+
+# ---------------------------------------------------------------------------
 # 1. KernelSU-Next
 # ---------------------------------------------------------------------------
 log "== KernelSU-Next =="
