@@ -264,6 +264,7 @@ log "== Scarlet gaming =="
 for f in "$SCRIPTS_DIR/scarlet/cpufreq_scarlet.c" \
          "$SCRIPTS_DIR/scarlet/governor_scarlet.c" \
          "$SCRIPTS_DIR/scarlet-gaming.patch" \
+         "$SCRIPTS_DIR/scarlet-lockdown.py" \
          "$SCRIPTS_DIR/no-thermal-throttle.patch" \
          "$SCRIPTS_DIR/no-critical-shutdown.patch"; do
     [ -s "$f" ] || die "file Scarlet gaming hilang: $f"
@@ -276,6 +277,12 @@ if ! git apply --verbose "$SCRIPTS_DIR/scarlet-gaming.patch" 2> "$WORKDIR/scarle
     die "scarlet-gaming.patch gagal di base ini (Kconfig/Makefile/devfreq.c berubah?)"
 fi
 log "governor 'scarlet' (CPU + devfreq) + fallback devfreq terpasang"
+
+# VoidPrjct-Scarlet lockdown: matikan thermal throttling + kunci governor dan
+# batas frekuensi. HARUS dijalankan SETELAH scarlet-gaming.patch karena keduanya
+# menyunting drivers/devfreq/devfreq.c. Skrip berhenti (exit 1) kalau ada pola
+# yang tidak cocok tepat sekali, sehingga tidak ada kernel setengah diubah.
+python3 "$SCRIPTS_DIR/scarlet-lockdown.py" "$KERNEL_DIR"
 
 # Thermal dibiarkan stok. Patch no-thermal-throttle dan no-critical-shutdown
 # TIDAK dipasang lagi: stub cooling yang mengembalikan NULL bukan ERR_PTR,
