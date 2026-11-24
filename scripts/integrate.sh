@@ -47,7 +47,7 @@ log "versi kernel: $KVER"
 # 0. MGLRU (multi-gen LRU) — backport dari android13-5.10
 # ---------------------------------------------------------------------------
 # Dipasang PALING AWAL: patch dibuat (3-way) terhadap tree fork pada
-# 98ab0310 persis, jadi di sini wajib apply bersih tanpa fuzz. Semua
+# 99d99725 persis, jadi di sini wajib apply bersih tanpa fuzz. Semua
 # komponen lain (KSU/SUSFS/Scarlet) menyentuh file yang berbeda-beda
 # regionnya (dihunis: hunk fs/exec.c & mm/memory.c SUSFS 50 tidak
 # bertabrakan dengan hunk MGLRU), sehingga urutan ini paling aman.
