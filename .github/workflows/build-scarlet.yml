@@ -19,7 +19,7 @@ on:
       kernel_sha:
         description: "Commit base yang dipin (harus sama dengan tip branch; kalau berbeda, build berhenti)"
         type: string
-        default: 99d99725ad897f1ee6c9c7c131c713ec2055c22c
+        default: 98ab0310f2aec486e84d5d60c36d0575dfb5482a
       ksu_sha:
         description: "SHA KernelSU-Next"
         type: string
