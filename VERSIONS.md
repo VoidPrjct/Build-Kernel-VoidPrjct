@@ -49,3 +49,10 @@ Upstream via merge tag `v5.10.275` (gregkh/linux) langsung ke branch
 
 Verifikasi pasca-merge: `mglru.patch` apply bersih, SUSFS patch 50 apply
 bersih (tanpa fuzz) di atas tree 275+MGLRU.
+
+## Catatan rollback MGLRU (2026-11-24)
+
+Build 5.10.275 + MGLRU (run #36) **bootloop** di device. MGLRU dihapus total
+dari pipeline (integrate.sh, scarlet.fragment, scripts/mglru.patch) sambil
+di-bisect: kernel tetap 5.10.275 (pin 99d99725). Patch MGLRU diarsipkan di
+riwayat git repo build, bisa dihidupkan lagi kalau nanti mau diteruskan.
