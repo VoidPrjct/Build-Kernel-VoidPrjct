@@ -39,6 +39,9 @@ static int devfreq_scarlet_handler(struct devfreq *devfreq,
 
 static struct devfreq_governor devfreq_scarlet = {
 	.name = "scarlet",
+	/* VoidPrjct-Scarlet: immutable agar userspace tidak bisa pindah
+	 * governor lewat sysfs (governor_store menolak jika ->immutable). */
+	.immutable = true,
 	.get_target_freq = devfreq_scarlet_func,
 	.event_handler = devfreq_scarlet_handler,
 };
