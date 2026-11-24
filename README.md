@@ -1,7 +1,5 @@
 # VoidPrjct-Scarlet — Build-Kernel
 
-Repo build untuk kernel GKI `android12-5.10` (Linux 5.10.272)
-
 ```
                AAA               KKKKKKKKK    KKKKKKKUUUUUUUU     UUUUUUUU                           AAA               IIIIIIIIII               SSSSSSSSSSSSSSS LLLLLLLLLLL                  OOOOOOOOO     PPPPPPPPPPPPPPPPP
               A:::A              K:::::::K    K:::::KU::::::U     U::::::U                          A:::A              I::::::::I             SS:::::::::::::::SL:::::::::L                OO:::::::::OO   P::::::::::::::::P
