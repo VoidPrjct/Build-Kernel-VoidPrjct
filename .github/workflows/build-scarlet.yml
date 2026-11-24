@@ -360,7 +360,11 @@ jobs:
           if-no-files-found: warn
 
       - name: Push branch integrasi ke fork
-        if: inputs.push_integration && !cancelled()
+        # Dinonaktifkan permanen: secret KERNEL_PAT ditolak GitHub
+        # ("Invalid username or token", run 45330302392) meski extraheader
+        # sudah dikosongkan dan remote di-set ulang. Integrasi tetap bisa
+        # dibangun; hasilnya tersimpan sebagai artifact, bukan branch fork.
+        if: false && inputs.push_integration && !cancelled()
         env:
           KERNEL_PAT: ${{ secrets.KERNEL_PAT }}
         run: |
