@@ -499,7 +499,15 @@ index 5b77a46..43a0739 100644
  obj-$(CONFIG_TCP_CONG_CUBIC) += tcp_cubic.o
 --- a/net/ipv4/sysctl_net_ipv4.c
 +++ b/net/ipv4/sysctl_net_ipv4.c
-@@ -55,6 +55,122 @@
+@@ -29,4 +29,7 @@
+ #include <net/netevent.h>
+ 
++#ifndef __GENKSYMS__
++#include <net/netns/generic.h>
++#endif
+ static int two = 2;
+ static int four = 4;
+@@ -55,6 +58,122 @@
  /* obsolete */
  static int sysctl_tcp_low_latency __read_mostly;
  
