@@ -23,6 +23,14 @@ CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y
 ## NoMount built-in (PRD 6.4)
 CONFIG_NOMOUNT=y
 
+## BBRv3 (backport WildKernels, scripts/bbrv3-510.patch). Kconfig patch mendefinisikan
+## TCP_CONG_BBR3 dengan "default n", jadi tanpa baris ini tcp_bbr3.o tidak pernah
+## dikompilasi dan bbr3 tidak muncul di tcp_available_congestion_control.
+## Algoritma terdaftar dengan nama "bbr3" (bbr asli tetap ada). Default congestion
+## control TIDAK diubah (tetap bawaan GKI); pilih lewat sysctl:
+##   sysctl -w net.ipv4.tcp_congestion_control=bbr3
+CONFIG_TCP_CONG_BBR3=y
+
 ## LTO thin (PRD 6.5). Folder arch/Kconfig pada base commit:
 ##   config LTO (629), LTO_CLANG (634), LTO_NONE (680),
 ##   LTO_CLANG_FULL (685), LTO_CLANG_THIN (704)
