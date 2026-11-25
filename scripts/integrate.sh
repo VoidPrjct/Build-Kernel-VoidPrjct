@@ -44,35 +44,6 @@ log "versi kernel: $KVER"
 [ "$KVER" = "5.10.274" ] || warn "versi kernel $KVER, VERSIONS.md mencatat 5.10.274"
 
 # ---------------------------------------------------------------------------
-# 1. KernelSU-Next
-# ---------------------------------------------------------------------------
-log "== KernelSU-Next =="
-KSU_SETUP_URL="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${KSU_SHA}/kernel/setup.sh"
-fetch_taruh "$WORKDIR/ksu-setup.sh" "$KSU_SETUP_URL" \
-    || die "gagal mengambil setup.sh KernelSU-Next pada $KSU_SHA"
-
-# setup.sh men-checkout target yang diberikan, TAPI kalau checkout gagal dia
-# diam-diam pakai branch default (ini diperingatkan di PRD 6.2). Karena itu
-# SHA diverifikasi ulang setelahnya.
-sh "$WORKDIR/ksu-setup.sh" "$KSU_SHA" || die "setup.sh KernelSU-Next gagal"
-
-# setup.sh menaruh hasil clone di $GKI_ROOT/$REPO, dan REPO="$OWNER" = KernelSU-Next.
-# (Diuji di run 44928994659: folder-nya memang KernelSU-Next, bukan KernelSU.)
-KSU_DIR="$KERNEL_DIR/KernelSU-Next"
-
-[ -d "$KSU_DIR" ] || die "folder KernelSU-Next tidak terbentuk di $KSU_DIR"
-GOT_KSU=$(git -C "$KSU_DIR" rev-parse HEAD)
-if ! sha_match "$KSU_SHA" "$GOT_KSU"; then
-    die "KernelSU-Next salah checkout: dapat $GOT_KSU, harusnya $KSU_SHA (setup.sh kemungkinan fallback ke branch default)"
-fi
-log "KernelSU-Next OK: $GOT_KSU"
-
-if [ -e drivers/kernelsu ] && [ ! -L drivers/kernelsu ]; then
-    die "drivers/kernelsu ada tapi bukan symlink; struktur tidak sesuai harapan"
-fi
-log "symlink drivers/kernelsu -> $(readlink drivers/kernelsu || echo '?')"
-
-# ---------------------------------------------------------------------------
 # Helper unduh: retry + backoff untuk 429 / 5xx, gagal cepat kalau tetap gagal.
 # ---------------------------------------------------------------------------
 # Run 45519910269 nyangkut 12 menit di langkah ini: curl dapat 429 dari GitLab,
@@ -101,6 +72,35 @@ fetch_taruh() { # $1=tujuan, $2=url
     cat "$WORKDIR/fetch.err" >&2 || true
     return 1
 }
+
+# ---------------------------------------------------------------------------
+# 1. KernelSU-Next
+# ---------------------------------------------------------------------------
+log "== KernelSU-Next =="
+KSU_SETUP_URL="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${KSU_SHA}/kernel/setup.sh"
+fetch_taruh "$WORKDIR/ksu-setup.sh" "$KSU_SETUP_URL" \
+    || die "gagal mengambil setup.sh KernelSU-Next pada $KSU_SHA"
+
+# setup.sh men-checkout target yang diberikan, TAPI kalau checkout gagal dia
+# diam-diam pakai branch default (ini diperingatkan di PRD 6.2). Karena itu
+# SHA diverifikasi ulang setelahnya.
+sh "$WORKDIR/ksu-setup.sh" "$KSU_SHA" || die "setup.sh KernelSU-Next gagal"
+
+# setup.sh menaruh hasil clone di $GKI_ROOT/$REPO, dan REPO="$OWNER" = KernelSU-Next.
+# (Diuji di run 44928994659: folder-nya memang KernelSU-Next, bukan KernelSU.)
+KSU_DIR="$KERNEL_DIR/KernelSU-Next"
+
+[ -d "$KSU_DIR" ] || die "folder KernelSU-Next tidak terbentuk di $KSU_DIR"
+GOT_KSU=$(git -C "$KSU_DIR" rev-parse HEAD)
+if ! sha_match "$KSU_SHA" "$GOT_KSU"; then
+    die "KernelSU-Next salah checkout: dapat $GOT_KSU, harusnya $KSU_SHA (setup.sh kemungkinan fallback ke branch default)"
+fi
+log "KernelSU-Next OK: $GOT_KSU"
+
+if [ -e drivers/kernelsu ] && [ ! -L drivers/kernelsu ]; then
+    die "drivers/kernelsu ada tapi bukan symlink; struktur tidak sesuai harapan"
+fi
+log "symlink drivers/kernelsu -> $(readlink drivers/kernelsu || echo '?')"
 
 # ---------------------------------------------------------------------------
 # 2. SUSFS sisi kernel (patch 50)
