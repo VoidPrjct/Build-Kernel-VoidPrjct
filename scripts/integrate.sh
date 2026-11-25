@@ -405,8 +405,8 @@ grep -qF 'ANDROID_KABI_USE2(3, u8 child_burst, u32 child_burst_cnt);' include/li
     || die "child_burst tidak di slot KABI 3"
 grep -qF 'ANDROID_KABI_USE(4, u64 child_burst_last_cached);' include/linux/sched.h \
     || die "child_burst_last_cached tidak di slot KABI 4"
-grep -q 'sched_bore' kernel/sched/core.c \
-    || die "sched_bore tidak ditemukan di core.c"
+grep -q 'sched_init_bore' kernel/sched/core.c \
+    || die "sched_init_bore tidak ditemukan di core.c"
 log "BORE 5.3.0 terpasang (KABI-safe)"
 
 # BBRv3: kernel 5.10 belum punya, jadi dibackport. tcp_bbr3.c baru, tcp_plb.c
