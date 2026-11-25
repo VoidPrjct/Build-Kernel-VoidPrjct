@@ -48,7 +48,7 @@ log "versi kernel: $KVER"
 # ---------------------------------------------------------------------------
 log "== KernelSU-Next =="
 KSU_SETUP_URL="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${KSU_SHA}/kernel/setup.sh"
-curl -fsSL "$KSU_SETUP_URL" -o "$WORKDIR/ksu-setup.sh" \
+fetch_taruh "$WORKDIR/ksu-setup.sh" "$KSU_SETUP_URL" \
     || die "gagal mengambil setup.sh KernelSU-Next pada $KSU_SHA"
 
 # setup.sh men-checkout target yang diberikan, TAPI kalau checkout gagal dia
@@ -73,6 +73,36 @@ fi
 log "symlink drivers/kernelsu -> $(readlink drivers/kernelsu || echo '?')"
 
 # ---------------------------------------------------------------------------
+# Helper unduh: retry + backoff untuk 429 / 5xx, gagal cepat kalau tetap gagal.
+# ---------------------------------------------------------------------------
+# Run 45519910269 nyangkut 12 menit di langkah ini: curl dapat 429 dari GitLab,
+# lalu menggantung alih-alih berhenti. Penyebabnya curl tanpa batas waktu dan
+# tanpa jeda antar-retry, sementara `set -e` tidak menolong karena curl dipanggil
+# di dalam fungsi. Helper ini menutup dua lubang itu.
+fetch_taruh() { # $1=tujuan, $2=url
+    local out="$1" url="$2" i code
+    for i in 1 2 3 4 5; do
+        code=$(curl -sSL -w '%{http_code}' \
+                    --connect-timeout 15 --max-time 120 \
+                    -o "$out" "$url" 2>"$WORKDIR/fetch.err") && {
+            case "$code" in
+                2??) return 0 ;;
+            esac
+        }
+        warn "unduh gagal (HTTP $code, coba $i/5): $url"
+        case "$code" in
+            429|5??|000) sleep $(( i * 5 )) ;;
+            *)  # 404 dan sejenisnya tidak akan membaik dengan retry
+                cat "$WORKDIR/fetch.err" >&2 || true
+                return 1 ;;
+        esac
+    done
+    warn "menyerah setelah 5 percobaan: $url"
+    cat "$WORKDIR/fetch.err" >&2 || true
+    return 1
+}
+
+# ---------------------------------------------------------------------------
 # 2. SUSFS sisi kernel (patch 50)
 # ---------------------------------------------------------------------------
 log "== SUSFS $SUSFS_COMMIT =="
@@ -84,9 +114,9 @@ GL_PROJ="simonpunk%2Fsusfs4ksu"
 gl_raw() { # $1=path di repo, $2=tujuan
     local enc
     enc=$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1")
-    curl -fsSL --retry 3 \
+    fetch_taruh "$2" \
         "https://gitlab.com/api/v4/projects/${GL_PROJ}/repository/files/${enc}/raw?ref=${SUSFS_COMMIT}" \
-        -o "$2" || die "gagal mengambil '$1' dari susfs4ksu@${SUSFS_COMMIT}"
+        || die "gagal mengambil '$1' dari susfs4ksu@${SUSFS_COMMIT}"
 }
 gl_raw "kernel_patches/50_add_susfs_in_gki-android12-5.10.patch" "$SUSFS_P/50.patch"
 gl_raw "kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"  "$SUSFS_P/10.patch"
@@ -319,7 +349,7 @@ log "susfs_compat.c terpasang"
 # ---------------------------------------------------------------------------
 log "== NoMount $NOMOUNT_SHA =="
 NOMOUNT_URL="https://raw.githubusercontent.com/maxsteeel/nomount/${NOMOUNT_SHA}/kernel/setup.sh"
-curl -fsSL "$NOMOUNT_URL" -o "$WORKDIR/nomount-setup.sh" \
+fetch_taruh "$WORKDIR/nomount-setup.sh" "$NOMOUNT_URL" \
     || die "gagal mengambil setup.sh NoMount pada $NOMOUNT_SHA"
 sh "$WORKDIR/nomount-setup.sh" "$NOMOUNT_SHA" || die "setup.sh NoMount gagal"
 
