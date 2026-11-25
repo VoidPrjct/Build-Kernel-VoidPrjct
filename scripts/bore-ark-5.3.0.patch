@@ -1,39 +1,80 @@
 From: Arkael-Dev <noreply@github.com>
-Subject: [PATCH] sched: BORE 5.3.0 backport (via Arkael-Dev/arkael-kernel-a12-5.10)
+Subject: [PATCH] sched: BORE 5.3.0 backport (KABI-safe, via Arkael-Dev)
 
-Digabung dari tiga commit branch bore-bbrv3-5.10 milik Arkael-Dev:
-  9caf5f8d63  sched: Import BORE Scheduler 5.1.0
-  4de13e2b02  sched: Partial backport BORE 5.1.11
-  49c32850b1  sched: Partial backport BORE 5.3.0
+Sumber: branch bore-bbrv3-5.10 repo Arkael-Dev/arkael-kernel-a12-5.10,
+tiga commit 9caf5f8d63 (import 5.1.0) + 4de13e2b02 (partial 5.1.11) +
+49c32850b1 (partial 5.3.0). Pohon Arkael = android12-5.10 Linux 5.10.274,
+sama dengan fork ini.
 
-Pohon Arkael = android12-5.10 Linux 5.10.274, sama dengan fork ini, jadi
-patch apply bersih tanpa fuzz.
+BAGIAN PENTING (penyebab softbrick pada percobaan sebelumnya):
+field BORE di struct sched_entity diletakkan di slot KABI, bukan sebagai
+field biasa:
 
-Penting: field BORE di struct sched_entity memakai ANDROID_KABI_USE,
-_ANDROID_KABI_REPLACE, dan ANDROID_KABI_USE2 -- persis seperti kernel GKI
-lain. Versi port manual sebelumnya menaruh field biasa di luar KABI slot,
-sehingga sizeof(struct sched_entity) berubah dan vendor module yang
-di-prebuilt tidak bisa dipakai (gejala: softbrick setelah flash).
+    ANDROID_KABI_USE(1, u64 burst_time);
+    _ANDROID_KABI_REPLACE(_ANDROID_KABI_RESERVE(2), struct { 4x u8 });
+    ANDROID_KABI_USE2(3, u8 child_burst, u32 child_burst_cnt);
+    ANDROID_KABI_USE(4, u64 child_burst_last_cached);
+
+Versi port manual sebelumnya memakai field biasa di luar KABI, sehingga
+sizeof(struct sched_entity) berubah dan vendor module prebuilt jadi tidak
+valid -> kernel berhenti setelah flash.
 
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
-@@ -468,6 +468,16 @@
- 	u64				sum_exec_runtime;
- 	u64				vruntime;
- 	u64				prev_sum_exec_runtime;
+@@ -494,10 +494,27 @@
+ 	struct sched_avg		avg;
+ #endif
+ 
++	struct sched_avg		avg;
++#endif
++
 +#ifdef CONFIG_SCHED_BORE
-+	u64				burst_time;
-+	u8				prev_burst_penalty;
-+	u8				curr_burst_penalty;
-+	u8				burst_penalty;
-+	u8				burst_score;
-+	u8				child_burst;
-+	u32				child_burst_cnt;
-+	u64				child_burst_last_cached;
++	ANDROID_KABI_USE(1, u64 burst_time);
++	_ANDROID_KABI_REPLACE(_ANDROID_KABI_RESERVE(2),
++		struct {
++			u8 prev_burst_penalty;
++			u8 curr_burst_penalty;
++			u8 burst_penalty;
++			u8 burst_score;
++		}
++	);
++	ANDROID_KABI_USE2(3, u8 child_burst, u32 child_burst_cnt);
++	ANDROID_KABI_USE(4, u64 child_burst_last_cached);
++#else // CONFIG_SCHED_BORE
+ 	ANDROID_KABI_RESERVE(1);
+ 	ANDROID_KABI_RESERVE(2);
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
 +#endif // CONFIG_SCHED_BORE
+ };
  
- 	u64				nr_migrations;
+ struct sched_rt_entity {
+--- a/init/Kconfig
++++ b/init/Kconfig
+@@ -1275,6 +1275,23 @@
+ 	  entries.
  
+ 	  If unsure, say N here.
++
++config SCHED_BORE
++	bool "Burst-Oriented Response Enhancer"
++	default y
++	help
++	  In Desktop and Mobile computing, one might prefer interactive
++	  tasks to keep responsive no matter what they run in the background.
++
++	  Enabling this kernel feature modifies the scheduler to discriminate
++	  tasks by their burst time (runtime since it last went sleeping or
++	  yielding state) and prioritize those that run less bursty.
++	  Such tasks usually include window compositor, widgets backend,
++	  terminal emulator, video playback, games and so on.
++	  With a little impact to scheduling fairness, it may improve
++	  responsiveness especially under heavy background workload.
++
++	  If unsure, say Y here.
+ 
+ config SCHED_AUTOGROUP
+ 	bool "Automatic process group scheduling"
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
 @@ -3292,6 +3292,132 @@
@@ -603,32 +644,6 @@ di-prebuilt tidak bisa dipakai (gejala: softbrick setelah flash).
  	{
  		.procname	= "sched_child_runs_first",
  		.data		= &sysctl_sched_child_runs_first,
---- a/init/Kconfig
-+++ b/init/Kconfig
-@@ -1275,6 +1275,23 @@
- 	  entries.
- 
- 	  If unsure, say N here.
-+
-+config SCHED_BORE
-+	bool "Burst-Oriented Response Enhancer"
-+	default y
-+	help
-+	  In Desktop and Mobile computing, one might prefer interactive
-+	  tasks to keep responsive no matter what they run in the background.
-+
-+	  Enabling this kernel feature modifies the scheduler to discriminate
-+	  tasks by their burst time (runtime since it last went sleeping or
-+	  yielding state) and prioritize those that run less bursty.
-+	  Such tasks usually include window compositor, widgets backend,
-+	  terminal emulator, video playback, games and so on.
-+	  With a little impact to scheduling fairness, it may improve
-+	  responsiveness especially under heavy background workload.
-+
-+	  If unsure, say Y here.
- 
- config SCHED_AUTOGROUP
- 	bool "Automatic process group scheduling"
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
 @@ -2229,6 +2229,9 @@

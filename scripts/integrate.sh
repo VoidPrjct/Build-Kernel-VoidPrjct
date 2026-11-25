@@ -395,8 +395,16 @@ if ! git apply --verbose "$BORE_PATCH" 2> "$WORKDIR/bore-patch.err"; then
 fi
 grep -q 'Burst-Oriented Response Enhancer' kernel/sched/fair.c \
     || die "patch BORE masuk tapi header fair.c tidak berubah"
-grep -q 'ANDROID_KABI_USE(1, u64 burst_time)' include/linux/sched.h \
-    || die "field burst_time tidak memakai KABI slot -- ABI bisa bergeser"
+# Gerbang ABI: burst_time WAJIB di slot KABI. Kalau cuma muncul sebagai field
+# biasa, sizeof(struct sched_entity) bergeser dan vendor module prebuilt mati.
+grep -qF 'ANDROID_KABI_USE(1, u64 burst_time);' include/linux/sched.h \
+    || die "burst_time tidak di slot ANDROID_KABI_USE(1) -- layout ABI bergeser"
+grep -qF '_ANDROID_KABI_REPLACE(_ANDROID_KABI_RESERVE(2)' include/linux/sched.h \
+    || die "burst_penalty tidak di slot KABI 2"
+grep -qF 'ANDROID_KABI_USE2(3, u8 child_burst, u32 child_burst_cnt);' include/linux/sched.h \
+    || die "child_burst tidak di slot KABI 3"
+grep -qF 'ANDROID_KABI_USE(4, u64 child_burst_last_cached);' include/linux/sched.h \
+    || die "child_burst_last_cached tidak di slot KABI 4"
 grep -q 'sched_bore' kernel/sched/core.c \
     || die "sched_bore tidak ditemukan di core.c"
 log "BORE 5.3.0 terpasang (KABI-safe)"
