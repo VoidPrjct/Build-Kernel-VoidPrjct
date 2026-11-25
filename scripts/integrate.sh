@@ -379,25 +379,40 @@ grep -qF '"Tracepoint"' "$DISPATCH" && die "masih ada label Tracepoint"
 log "mode hook tampil sebagai Scarlet-Hook (hook tetap Tracepoint)"
 
 # ---------------------------------------------------------------------------
-# 6. BORE (Burst-Oriented Response Enhancer) - port 5.15.1.0 ke 5.10
+# 6. BORE 5.3.0 (via Arkael-Dev/arkael-kernel-a12-5.10) + BBRv3
 # ---------------------------------------------------------------------------
-# Patch ini mengubah kernel/sched/*, jadi diletakkan PALING AKHIR supaya kalau
-# gagal, semua langkah sebelumnya sudah terverifikasi dan penyebabnya jelas.
-# Tidak menyentuh berkas yang dipatch langkah lain (SUSFS/Scarlet), tapi karena
-# `git apply` bersifat atomik, konflik di schedulers akan menggagalkan build di
-# sini, bukan diam-diam.
-log "== BORE scheduler =="
-BORE_PATCH="$SCRIPTS_DIR/bore-5.1.0-510.patch"
+# BORE diambil dari tiga commit Arkael (Import 5.1.0 + partial 5.1.11 + 5.3.0),
+# digabung jadi satu patch. Pohon Arkael = android12-5.10 5.10.274, sama dengan
+# fork ini, jadi apply bersih tanpa fuzz. Struct sched_entity-nya memakai
+# ANDROID_KABI_USE/_ANDROID_KABI_REPLACE, sama seperti kernel GKI lain -- ini
+# yang membuat layout ABI tidak bergeser.
+log "== BORE 5.3.0 =="
+BORE_PATCH="$SCRIPTS_DIR/bore-ark-5.3.0.patch"
 [ -s "$BORE_PATCH" ] || die "patch BORE hilang: $BORE_PATCH"
 if ! git apply --verbose "$BORE_PATCH" 2> "$WORKDIR/bore-patch.err"; then
     cat "$WORKDIR/bore-patch.err" >&2
-    die "bore-5.1.0-510.patch gagal di base ini (kernel/sched/* berubah?)"
+    die "bore-ark-5.3.0.patch gagal di base ini (kernel/sched/* berubah?)"
 fi
 grep -q 'Burst-Oriented Response Enhancer' kernel/sched/fair.c \
     || die "patch BORE masuk tapi header fair.c tidak berubah"
-grep -q 'sched_bore_reweight' kernel/sched/core.c \
-    || die "patch BORE masuk tapi sched_bore_reweight() tidak ada di core.c"
-log "BORE 5.1.0 terpasang (fair.c + core.c + sysctl + Kconfig)"
+grep -q 'ANDROID_KABI_USE(1, u64 burst_time)' include/linux/sched.h \
+    || die "field burst_time tidak memakai KABI slot -- ABI bisa bergeser"
+grep -q 'sched_bore' kernel/sched/core.c \
+    || die "sched_bore tidak ditemukan di core.c"
+log "BORE 5.3.0 terpasang (KABI-safe)"
+
+# BBRv3: kernel 5.10 belum punya, jadi dibackport. tcp_bbr3.c baru, tcp_plb.c
+# baru, sisanya penyesuaian. Namanya bbr3 (bukan bbr) supaya bbr asli tetap ada.
+log "== BBRv3 (backport WildKernels android12-5.10) =="
+BBR_PATCH="$SCRIPTS_DIR/bbrv3-510.patch"
+[ -s "$BBR_PATCH" ] || die "patch BBRv3 hilang: $BBR_PATCH"
+if ! git apply --verbose "$BBR_PATCH" 2> "$WORKDIR/bbrv3-patch.err"; then
+    cat "$WORKDIR/bbrv3-patch.err" >&2
+    die "bbrv3-510.patch gagal di base ini (net/ipv4/* berubah?)"
+fi
+[ -s net/ipv4/tcp_bbr3.c ] || die "tcp_bbr3.c tidak terbentuk"
+grep -q 'TCP_CONG_BBR3' net/ipv4/Kconfig || die "TCP_CONG_BBR3 tidak ada di Kconfig"
+log "BBRv3 terpasang (tcp_bbr3.c + tcp_plb.c)"
 
 # ---------------------------------------------------------------------------
 # 7. Ringkasan hasil
@@ -406,5 +421,6 @@ log "== ringkasan =="
 log "KernelSU-Next : $GOT_KSU"
 log "SUSFS        : $SUSFS_COMMIT (v2.4.0, patch 50 built-in)"
 log "NoMount      : $GOT_NM"
-log "BORE         : 5.1.0 (port 5.15 ke 5.10, burst_score di sched_debug)"
+log "BORE         : 5.3.0 (via Arkael, KABI-safe)"
+log "BBRv3        : backport WildKernels (tcp_bbr3 + tcp_plb)"
 log "integrasi selesai"
